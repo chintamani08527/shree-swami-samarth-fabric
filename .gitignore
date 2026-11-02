@@ -17,12 +17,14 @@ build/
 # Databases & local state
 server/dev.db
 server/dev.db-journal
-server/prisma/*.db
-server/prisma/*.db-journal
-*.sqlite
-*.sqlite3
-*.db
+server/prisma/*-journal
+server/prisma/*-wal
+server/prisma/*-shm
+*.sqlite-journal
 *.db-journal
+*.db-wal
+*.db-shm
+!server/prisma/dev.db
 
 # Logs
 logs

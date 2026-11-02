@@ -1,0 +1,155 @@
+// Prisma Schema for Shree Swami Samarth Fabric Attendance Management System
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  SUPERVISOR
+  WORKER
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  HALF_DAY
+  ABSENT
+  ON_LEAVE
+  HOLIDAY
+}
+
+enum AttendanceSource {
+  WEB_MOBILE
+  WEB_DESKTOP
+  MANUAL_CORRECTION
+  ADMIN_OVERRIDE
+}
+
+model User {
+  id           String    @id @default(uuid())
+  workerId     String    @unique // e.g. SSF-001, ADM-001, SUP-001
+  name         String
+  phone        String?
+  passwordHash String
+  role         Role      @default(WORKER)
+  dailyWage    Float?    // Daily wage or pay rate (₹)
+  isActive     Boolean   @default(true)
+  joiningDate  DateTime  @default(now())
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  attendanceRecords AttendanceRecord[]
+  workerShifts      WorkerShift[]
+  auditLogs         AuditLog[]
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([workerId])
+  @@index([role])
+  @@index([departmentId])
+  @@index([isActive])
+}
+
+model Department {
+  id          String   @id @default(uuid())
+  name        String   @unique // e.g. Weaving, Jacquard, Spinning, Dyeing
+  description String?
+  isActive    Boolean  @default(true)
+  users       User[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
+}
+
+model AttendanceRecord {
+  id                String           @id @default(uuid())
+  userId            String
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workerId          String
+  attendanceDate    String           // YYYY-MM-DD format (Asia/Kolkata date)
+  checkInAt         DateTime?        // UTC timestamp
+  checkOutAt        DateTime?        // UTC timestamp
+  status            AttendanceStatus @default(PRESENT)
+  source            AttendanceSource @default(WEB_MOBILE)
+  workingMinutes    Int              @default(0) // actual working minutes excluding break
+  breakMinutes      Int              @default(0) // deducted break minutes
+  overtimeMinutes   Int              @default(0) // overtime minutes beyond shift
+  lateMinutes       Int              @default(0) // late arrival minutes beyond grace period
+  isMissingCheckOut Boolean          @default(false)
+  remarks           String?          // Notes, correction reasons, etc.
+
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@unique([userId, attendanceDate])
+  @@index([attendanceDate])
+  @@index([workerId])
+  @@index([status])
+  @@index([isMissingCheckOut])
+}
+
+model Shift {
+  id                    String        @id @default(uuid())
+  name                  String        @unique // e.g. General Shift (8 AM - 5 PM)
+  startTime             String        // HH:mm (e.g. 08:00)
+  endTime               String        // HH:mm (e.g. 17:00)
+  gracePeriodMinutes    Int           @default(15)
+  breakDurationMinutes  Int           @default(60)
+  halfDayThresholdHours Float         @default(4.0)
+  fullDayThresholdHours Float         @default(8.0)
+  isActive              Boolean       @default(true)
+  workerShifts          WorkerShift[]
+
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+}
+
+model WorkerShift {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shiftId       String
+  shift         Shift     @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+
+  createdAt     DateTime  @default(now())
+
+  @@index([userId])
+  @@index([shiftId])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String?
+  actorUser   User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorName   String?
+  action      String   // e.g. CORRECTION, WORKER_CREATED, PIN_RESET
+  entityType  String   // ATTENDANCE, WORKER, DEPARTMENT, SETTINGS
+  entityId    String?
+  reason      String
+  details     String?  // JSON string
+  createdAt   DateTime @default(now())
+
+  @@index([actorUserId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+}
+
+model CompanySettings {
+  id                   String   @id @default("default-settings")
+  companyName          String   @default("Shree Swami Samarth Fabric")
+  timezone             String   @default("Asia/Kolkata")
+  defaultWorkingHours  Float    @default(8.0)
+  attendanceRules      String   // JSON string of rules (gracePeriod, breakDuration, autoAbsenceTime, etc.)
+  updatedAt            DateTime @updatedAt
+}
