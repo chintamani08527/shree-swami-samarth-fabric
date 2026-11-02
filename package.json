@@ -1,0 +1,31 @@
+{
+  "name": "shree-swami-samarth-fabric",
+  "version": "1.0.0",
+  "description": "Smart Attendance Management System for Shree Swami Samarth Fabric",
+  "private": true,
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "build:server": "npm --prefix server run build",
+    "build:client": "npm --prefix client run build",
+    "build": "npm run build:server && npm run build:client",
+    "test:server": "npm --prefix server run test",
+    "test": "npm run test:server",
+    "prisma:generate": "npm --prefix server run prisma:generate",
+    "prisma:push": "npm --prefix server run prisma:push",
+    "prisma:seed": "npm --prefix server run prisma:seed"
+  },
+  "keywords": [
+    "attendance",
+    "textile",
+    "manufacturing",
+    "react",
+    "express",
+    "prisma",
+    "postgresql",
+    "exceljs"
+  ],
+  "author": "Shree Swami Samarth Fabric",
+  "license": "UNLICENSED"
+}

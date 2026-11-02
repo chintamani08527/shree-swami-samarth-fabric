@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database Service
+  postgres:
+    image: postgres:16-alpine
+    container_name: ssf_attendance_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-fabric_attendance}
+      TZ: Asia/Kolkata
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fabric_attendance"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Attendance System Web Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ssf_attendance_app
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-fabric_attendance}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-shree-swami-samarth-fabric-production-secret-2026}
+      JWT_EXPIRES_IN: 7d
+      COMPANY_NAME: "Shree Swami Samarth Fabric"
+      COMPANY_TIMEZONE: "Asia/Kolkata"
+      CORS_ORIGIN: "http://localhost:5000"
+    ports:
+      - "5000:5000"
+
+  # Automated Daily Database Backup Service
+  db-backup:
+    image: prodrigestivill/postgres-backup-local:16-alpine
+    container_name: ssf_attendance_db_backup
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backups:/backups
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-fabric_attendance}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      SCHEDULE: "@daily"
+      BACKUP_KEEP_DAYS: 30
+      BACKUP_KEEP_WEEKS: 4
+      BACKUP_KEEP_MONTHS: 12
+      TZ: Asia/Kolkata
+
+volumes:
+  pgdata:
+    driver: local
