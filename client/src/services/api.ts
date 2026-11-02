@@ -1,4 +1,12 @@
-const API_BASE = '/api';
+const isAndroidApp =
+  typeof window !== 'undefined' &&
+  (window.location.protocol === 'capacitor:' ||
+    window.location.protocol === 'file:' ||
+    (window.location.hostname === 'localhost' && !window.location.port));
+
+const API_BASE =
+  ((import.meta as any).env?.VITE_API_BASE as string) ||
+  (isAndroidApp ? 'https://shree-swami-samarth-fabric.vercel.app/api' : '/api');
 
 function getAuthToken(): string | null {
   return localStorage.getItem('ssf_auth_token');
