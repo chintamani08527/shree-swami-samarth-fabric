@@ -66,11 +66,18 @@ export const authApi = {
 
 // 2. Attendance API
 export const attendanceApi = {
-  checkIn: (workerUserId?: string) =>
-    request<{ success: boolean; message: string; data: any; worker: any }>('/attendance/check-in', {
+  checkIn: (options?: { workerUserId?: string; shiftType?: 'DAY' | 'NIGHT' | string } | string) => {
+    let payload: Record<string, any> = {};
+    if (typeof options === 'string') {
+      payload.workerUserId = options;
+    } else if (options) {
+      payload = { ...options };
+    }
+    return request<{ success: boolean; message: string; data: any; worker: any }>('/attendance/check-in', {
       method: 'POST',
-      body: JSON.stringify(workerUserId ? { workerUserId } : {}),
-    }),
+      body: JSON.stringify(payload),
+    });
+  },
 
   checkOut: (options?: { workerUserId?: string; machinesOperated?: number; hoursOperated?: number } | string) => {
     let payload: Record<string, any> = {};

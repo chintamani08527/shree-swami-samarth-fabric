@@ -45,6 +45,12 @@ export const WorkerDashboard: React.FC = () => {
   const [customWorkRemarks, setCustomWorkRemarks] = useState<string>('');
   const [savingCustomWork, setSavingCustomWork] = useState(false);
 
+  // Day Shift vs Night Shift selection (asked directly to worker)
+  const currentHour = new Date().getHours();
+  const [selectedShift, setSelectedShift] = useState<'DAY' | 'NIGHT'>(
+    (currentHour >= 18 || currentHour < 6) ? 'NIGHT' : 'DAY'
+  );
+
   // Check if worker has custom wage access granted by admin
   const hasCustomWageAccess = Boolean(
     statusData?.worker?.hasCustomWageAccess ??
@@ -114,7 +120,7 @@ export const WorkerDashboard: React.FC = () => {
   const handleCheckIn = async () => {
     try {
       setActionLoading(true);
-      const res = await attendanceApi.checkIn();
+      const res = await attendanceApi.checkIn({ shiftType: selectedShift });
       if (res.success) {
         // Confetti celebration
         try {
@@ -270,7 +276,16 @@ export const WorkerDashboard: React.FC = () => {
             <span>•</span>
             <span>Dept: {user?.department?.name || 'Textile Floor'}</span>
             <span>•</span>
-            <span>Shift: {statusData?.shift?.name?.split('(')[0]?.trim() || 'General Shift'}</span>
+            <span>
+              Shift:{' '}
+              {statusData?.today.shiftType
+                ? statusData.today.shiftType === 'NIGHT'
+                  ? '🌙 Night Shift'
+                  : '☀️ Day Shift'
+                : selectedShift === 'NIGHT'
+                ? '🌙 Night Shift'
+                : '☀️ Day Shift'}
+            </span>
           </div>
 
           {/* Live Clock Card */}
@@ -370,90 +385,76 @@ export const WorkerDashboard: React.FC = () => {
 
               {/* BIG TOUCH TARGET ACTION BUTTONS */}
               <div className="space-y-3 pt-2">
-                {!isCheckedIn && statusData?.checkInWindow && (
-                  <div
-                    className={`p-3.5 rounded-xl border mb-1 transition-colors ${
-                      statusData.checkInWindow.isOpen
-                        ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
-                        : statusData.checkInWindow.isTooEarly
-                        ? 'bg-amber-50/90 border-amber-300 text-amber-950'
-                        : 'bg-rose-50/90 border-rose-300 text-rose-950'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5" />
-                        <span>Shift Check-In Window (±{statusData.checkInWindow.bandMinutes}m band)</span>
+                {/* Asking Day Shift or Night Shift directly on worker portal */}
+                {!isCheckedIn && (
+                  <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <span>🏭 Which shift are you working today?</span>
+                      </label>
+                      <span className="text-[10px] text-teal-700 font-bold bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200/60">
+                        Tap to Choose
                       </span>
-                      <span
-                        className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
-                          statusData.checkInWindow.isOpen
-                            ? 'bg-emerald-600 text-white'
-                            : statusData.checkInWindow.isTooEarly
-                            ? 'bg-amber-600 text-white'
-                            : 'bg-rose-600 text-white'
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedShift('DAY')}
+                        className={`py-3 px-3.5 rounded-xl text-xs sm:text-sm font-extrabold border flex items-center justify-center gap-2 transition-all tap-active ${
+                          selectedShift === 'DAY'
+                            ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white border-orange-500 shadow-md shadow-orange-500/20 scale-[1.02]'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
                         }`}
                       >
-                        {statusData.checkInWindow.isOpen
-                          ? 'Window Open'
-                          : statusData.checkInWindow.isTooEarly
-                          ? 'Not Open Yet'
-                          : 'Window Closed'}
-                      </span>
+                        <span className="text-lg">☀️</span>
+                        <span>Day Shift</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSelectedShift('NIGHT')}
+                        className={`py-3 px-3.5 rounded-xl text-xs sm:text-sm font-extrabold border flex items-center justify-center gap-2 transition-all tap-active ${
+                          selectedShift === 'NIGHT'
+                            ? 'bg-gradient-to-r from-indigo-700 to-navy-950 text-white border-navy-950 shadow-md shadow-navy-900/30 scale-[1.02]'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <span className="text-lg">🌙</span>
+                        <span>Night Shift</span>
+                      </button>
                     </div>
 
-                    <div className="text-sm font-black font-mono">
-                      Allowed Check-in: {statusData.checkInWindow.windowStart} — {statusData.checkInWindow.windowEnd}
-                    </div>
-
-                    <p className="text-[11px] mt-1">
-                      {statusData.checkInWindow.isOpen ? (
-                        <span className="text-emerald-800 font-semibold">
-                          ✅ You are within your shift start band time. Tap below to mark attendance.
-                        </span>
-                      ) : statusData.checkInWindow.isTooEarly ? (
-                        <span className="text-amber-800 font-semibold">
-                          ⏳ Shift starts at {statusData.shift?.startTime}. Check-in opens 30 minutes before ({statusData.checkInWindow.windowStart}).
-                        </span>
-                      ) : (
-                        <span className="text-rose-800 font-semibold">
-                          ⚠️ Check-in closed at {statusData.checkInWindow.windowEnd}. Contact Owner Vinayak Ginde or Supervisor.
-                        </span>
-                      )}
+                    <p className="text-[11px] text-slate-500 text-center font-medium">
+                      Selected Shift:{' '}
+                      <strong className="text-navy-950">
+                        {selectedShift === 'DAY' ? '☀️ Day Shift' : '🌙 Night Shift'}
+                      </strong>
                     </p>
+                  </div>
+                )}
+
+                {isCheckedIn && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 flex items-center justify-between text-xs">
+                    <span className="text-slate-500 font-medium">Today's Shift:</span>
+                    <span className="font-bold text-navy-950">
+                      {statusData?.today.shiftType === 'NIGHT' ? '🌙 Night Shift' : '☀️ Day Shift'}
+                    </span>
                   </div>
                 )}
 
                 {!isCheckedIn ? (
                   <button
                     onClick={handleCheckIn}
-                    disabled={actionLoading || (statusData?.checkInWindow ? !statusData.checkInWindow.isOpen : false)}
-                    className={`w-full py-4 px-6 rounded-2xl text-white font-extrabold text-lg sm:text-xl shadow-lg flex items-center justify-center gap-3 transition-all tap-active disabled:opacity-50 ${
-                      statusData?.checkInWindow && !statusData.checkInWindow.isOpen
-                        ? statusData.checkInWindow.isTooEarly
-                          ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/30'
-                          : 'bg-rose-700 hover:bg-rose-800 shadow-rose-700/30'
-                        : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-emerald-600/30'
-                    }`}
+                    disabled={actionLoading}
+                    className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-lg sm:text-xl shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-3 transition-all tap-active disabled:opacity-50"
                   >
                     {actionLoading ? (
                       <div className="w-6 h-6 border-3 border-white border-t-transparent rounded-full animate-spin" />
-                    ) : statusData?.checkInWindow && !statusData.checkInWindow.isOpen ? (
-                      statusData.checkInWindow.isTooEarly ? (
-                        <>
-                          <Clock className="w-6 h-6" />
-                          <span>OPENS AT {statusData.checkInWindow.windowStart}</span>
-                        </>
-                      ) : (
-                        <>
-                          <AlertCircle className="w-6 h-6" />
-                          <span>WINDOW CLOSED</span>
-                        </>
-                      )
                     ) : (
                       <>
                         <Clock className="w-6 h-6" />
-                        <span>TAP TO CHECK IN</span>
+                        <span>TAP TO CHECK IN ({selectedShift === 'DAY' ? 'DAY ☀️' : 'NIGHT 🌙'})</span>
                       </>
                     )}
                   </button>
@@ -638,6 +639,13 @@ export const WorkerDashboard: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-navy-950">{r.formattedDate}</span>
                         <span className="text-[11px] text-slate-500 font-medium">({r.dayOfWeek})</span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                          r.shiftType === 'NIGHT'
+                            ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                            : 'bg-amber-50 text-amber-800 border-amber-200'
+                        }`}>
+                          {r.shiftType === 'NIGHT' ? '🌙 Night' : '☀️ Day'}
+                        </span>
                       </div>
                       <div className="flex items-center gap-3 text-[11px] text-slate-600 mt-1 font-mono">
                         <span>In: {r.checkInTime}</span>

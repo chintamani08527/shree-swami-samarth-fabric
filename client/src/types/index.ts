@@ -85,6 +85,7 @@ export interface AttendanceRecord {
   remarks?: string | null;
   wageType?: 'FIXED' | 'CUSTOM';
   hasCustomWageAccess?: boolean;
+  shiftType?: 'DAY' | 'NIGHT' | string | null;
   machinesOperated?: number | null;
   hoursOperated?: number | null;
 }
@@ -98,6 +99,7 @@ export interface WorkerTodayStatus {
     isCheckedOut: boolean;
     checkInAt?: string | null;
     checkOutAt?: string | null;
+    shiftType?: 'DAY' | 'NIGHT' | string | null;
     formattedCheckInTime: string;
     formattedCheckOutTime: string;
     status: AttendanceStatusType;

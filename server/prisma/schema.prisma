@@ -58,6 +58,7 @@ model AttendanceRecord {
   attendanceDate    String    // YYYY-MM-DD format (Asia/Kolkata date)
   checkInAt         DateTime? // UTC timestamp
   checkOutAt        DateTime? // UTC timestamp
+  shiftType         String?   @default("DAY") // DAY or NIGHT (worker selected)
   status            String    @default("PRESENT") // PRESENT, LATE, HALF_DAY, ABSENT, ON_LEAVE, HOLIDAY
   source            String    @default("WEB_MOBILE") // WEB_MOBILE, WEB_DESKTOP, MANUAL_CORRECTION, ADMIN_OVERRIDE
   workingMinutes    Int       @default(0) // actual working minutes excluding break

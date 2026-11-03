@@ -119,7 +119,6 @@ export const WorkerManagement: React.FC = () => {
         phone: newPhone.trim() || undefined,
         role: newRole,
         departmentId: newDeptId || undefined,
-        shiftId: newShiftId || undefined,
         wageType: newWageType,
         hasCustomWageAccess: newWageType === 'CUSTOM' ? newHasCustomAccess : false,
         dailyWage: newWageType === 'FIXED' && newDailyWage ? parseFloat(newDailyWage) : undefined,
@@ -170,7 +169,6 @@ export const WorkerManagement: React.FC = () => {
         name: editName.trim(),
         phone: editPhone.trim() || null,
         departmentId: editDeptId || null,
-        shiftId: editShiftId || undefined,
         wageType: editWageType,
         hasCustomWageAccess: editWageType === 'CUSTOM' ? editHasCustomAccess : false,
         dailyWage: editWageType === 'FIXED' && editDailyWage ? parseFloat(editDailyWage) : null,
@@ -322,7 +320,7 @@ export const WorkerManagement: React.FC = () => {
                 <th className="py-3 px-4">Phone</th>
                 <th className="py-3 px-4">Department</th>
                 <th className="py-3 px-4 text-right">Wage Plan</th>
-                <th className="py-3 px-4">Assigned Shift</th>
+                <th className="py-3 px-4">Shift Mode</th>
                 <th className="py-3 px-4 text-center">Role</th>
                 <th className="py-3 px-4 text-center">Status</th>
                 {isAdmin && <th className="py-3 px-4 text-right">Actions</th>}
@@ -361,14 +359,9 @@ export const WorkerManagement: React.FC = () => {
                       )}
                     </td>
                     <td className="py-3 px-4 text-slate-600 text-xs">
-                      {w.shift ? (
-                        <span>
-                          {w.shift.name.split('(')[0].trim()}{' '}
-                          <span className="text-slate-400">({w.shift.startTime}-{w.shift.endTime})</span>
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 italic">Not Assigned</span>
-                      )}
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                        ☀️ Day / 🌙 Night (Worker Chooses)
+                      </span>
                     </td>
                     <td className="py-3 px-4 text-center">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/60">
@@ -551,7 +544,7 @@ export const WorkerManagement: React.FC = () => {
             )}
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">User Role</label>
               <select
@@ -580,22 +573,13 @@ export const WorkerManagement: React.FC = () => {
                 ))}
               </select>
             </div>
+          </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Shift</label>
-              <select
-                value={newShiftId}
-                onChange={(e) => setNewShiftId(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-teal-500"
-              >
-                <option value="">Default General Shift</option>
-                {shifts.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/80 text-[11px] text-slate-600 flex items-center gap-2">
+            <span className="text-sm">ℹ️</span>
+            <span>
+              <strong>Shift Assignment:</strong> Not required for Admin. Worker selects <strong>Day Shift (☀️)</strong> or <strong>Night Shift (🌙)</strong> directly when checking in.
+            </span>
           </div>
 
           <div>
@@ -751,20 +735,11 @@ export const WorkerManagement: React.FC = () => {
             </select>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Assigned Shift</label>
-            <select
-              value={editShiftId}
-              onChange={(e) => setEditShiftId(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-teal-500"
-            >
-              <option value="">Keep Existing Shift</option>
-              {shifts.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+          <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/80 text-[11px] text-slate-600 flex items-center gap-2">
+            <span className="text-sm">ℹ️</span>
+            <span>
+              <strong>Shift:</strong> Worker chooses Day Shift or Night Shift directly each day on their phone.
+            </span>
           </div>
 
           <div>

@@ -34,7 +34,8 @@ router.post('/check-in', async (req: Request, res: Response) => {
       adminActor = { id: req.user!.id, name: req.user!.name };
     }
 
-    const result = await processCheckIn(targetUserId, source, adminActor);
+    const shiftChoice = req.body.shiftType || req.body.shiftChoice;
+    const result = await processCheckIn(targetUserId, source, adminActor, shiftChoice);
 
     res.json({
       success: true,
@@ -205,6 +206,7 @@ const correctionSchema = z.object({
     checkInAt: z.string().nullable().optional(),
     checkOutAt: z.string().nullable().optional(),
     status: z.enum(['PRESENT', 'LATE', 'HALF_DAY', 'ABSENT', 'ON_LEAVE', 'HOLIDAY']).optional(),
+    shiftType: z.string().nullable().optional(),
     machinesOperated: z.number().nullable().optional(),
     hoursOperated: z.number().nullable().optional(),
     remarks: z.string().optional(),

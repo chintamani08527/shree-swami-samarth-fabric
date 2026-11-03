@@ -23,7 +23,8 @@ import { logAudit } from '../middleware/audit.js';
 export async function processCheckIn(
   userId: string,
   source: AttendanceSourceType = AttendanceSources.WEB_MOBILE,
-  adminActor?: { id: string; name: string }
+  adminActor?: { id: string; name: string },
+  shiftChoice?: 'DAY' | 'NIGHT' | string
 ) {
   const serverNow = new Date(); // Server-authoritative timestamp
   const attendanceDate = getKolkataDateString(serverNow);
@@ -60,55 +61,49 @@ export async function processCheckIn(
     );
   }
 
-  // Find shift (or default)
-  const shift = user.workerShifts[0]?.shift || await prisma.shift.findFirst({ where: { isActive: true } });
-
-  // Validate 30-minute check-in band time:
-  // Workers can only check in within 30 minutes before or after scheduled shift start.
-  // Admin / Owner overrides bypass this check.
-  if (shift && !adminActor) {
-    let bandMinutes = 30;
-    try {
-      const companySettings = await prisma.companySettings.findUnique({ where: { id: 'default-settings' } });
-      if (companySettings?.attendanceRules) {
-        const parsed = JSON.parse(companySettings.attendanceRules);
-        if (parsed.checkInBandMinutes !== undefined) {
-          bandMinutes = Number(parsed.checkInBandMinutes);
-        }
-      }
-    } catch {}
-
-    const expectedStart = parseKolkataTimeString(shift.startTime, attendanceDate);
-    let windowStart = new Date(expectedStart.getTime() - bandMinutes * 60 * 1000);
-    let windowEnd = new Date(expectedStart.getTime() + bandMinutes * 60 * 1000);
-
-    const nowMs = serverNow.getTime();
-    const dayMs = 24 * 60 * 60 * 1000;
-
-    // Handle shift boundary alignment (e.g. overnight shifts)
-    if (Math.abs(nowMs - (expectedStart.getTime() - dayMs)) < Math.abs(nowMs - expectedStart.getTime())) {
-      windowStart = new Date(windowStart.getTime() - dayMs);
-      windowEnd = new Date(windowEnd.getTime() - dayMs);
-    } else if (Math.abs(nowMs - (expectedStart.getTime() + dayMs)) < Math.abs(nowMs - expectedStart.getTime())) {
-      windowStart = new Date(windowStart.getTime() + dayMs);
-      windowEnd = new Date(windowEnd.getTime() + dayMs);
-    }
-
-    if (nowMs < windowStart.getTime()) {
-      const diffMins = Math.ceil((windowStart.getTime() - nowMs) / (60 * 1000));
-      throw new Error(
-        `Check-in window not open yet. Shift starts at ${formatKolkataTime(expectedStart)}. You can check in from ${formatKolkataTime(windowStart)} to ${formatKolkataTime(windowEnd)} (30 minutes band time). Opens in ${diffMins} min(s).`
-      );
-    }
-
-    if (nowMs > windowEnd.getTime()) {
-      throw new Error(
-        `Check-in window closed. Shift check-in was allowed until ${formatKolkataTime(windowEnd)} (30 minutes after shift start). Please contact Owner or Supervisor.`
-      );
-    }
+  // Determine normalized shift choice: 'DAY' or 'NIGHT'
+  let normalizedShiftType: 'DAY' | 'NIGHT' = 'DAY';
+  if (shiftChoice) {
+    const s = String(shiftChoice).toUpperCase();
+    if (s.includes('NIGHT') || s === 'N') normalizedShiftType = 'NIGHT';
+    else normalizedShiftType = 'DAY';
+  } else {
+    // Default based on current hour: after 18:00 or before 06:00 => NIGHT
+    const currentHour = parseInt(
+      new Intl.DateTimeFormat('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        hour: 'numeric',
+        hour12: false,
+      }).format(serverNow),
+      10
+    );
+    normalizedShiftType = (currentHour >= 18 || currentHour < 6) ? 'NIGHT' : 'DAY';
   }
 
-  // Calculate late minutes
+  // Find corresponding shift definition (or default)
+  let shift: any = user.workerShifts[0]?.shift || null;
+  if (!shift) {
+    if (normalizedShiftType === 'NIGHT') {
+      shift = (await prisma.shift.findFirst({
+        where: { name: { contains: 'Night' }, isActive: true },
+      })) || (await prisma.shift.findFirst({
+        where: { name: { contains: 'Evening' }, isActive: true },
+      }));
+    } else {
+      shift = (await prisma.shift.findFirst({
+        where: { name: { contains: 'Day' }, isActive: true },
+      })) || (await prisma.shift.findFirst({
+        where: { name: { contains: 'General' }, isActive: true },
+      }));
+    }
+  }
+  if (!shift) {
+    shift = await prisma.shift.findFirst({ where: { isActive: true } });
+  }
+
+  // Band timing restriction REMOVED per user instruction: workers can check in anytime for their selected shift
+
+  // Calculate working hours & status (no band restriction)
   const calc = calculateWorkingHoursAndStatus(serverNow, null, shift, attendanceDate);
 
   const record = existingRecord
@@ -116,6 +111,7 @@ export async function processCheckIn(
         where: { id: existingRecord.id },
         data: {
           checkInAt: serverNow,
+          shiftType: normalizedShiftType,
           status: calc.status,
           lateMinutes: calc.lateMinutes,
           source,
@@ -128,6 +124,7 @@ export async function processCheckIn(
           workerId: user.workerId,
           attendanceDate,
           checkInAt: serverNow,
+          shiftType: normalizedShiftType,
           status: calc.status,
           lateMinutes: calc.lateMinutes,
           source,
@@ -143,9 +140,11 @@ export async function processCheckIn(
       entityType: 'ATTENDANCE',
       entityId: record.id,
       reason: 'Admin marked check-in on behalf of worker',
-      details: { workerId: user.workerId, attendanceDate, checkInAt: serverNow },
+      details: { workerId: user.workerId, attendanceDate, checkInAt: serverNow, shiftType: normalizedShiftType },
     });
   }
+
+  const shiftLabel = normalizedShiftType === 'NIGHT' ? 'Night Shift 🌙' : 'Day Shift ☀️';
 
   return {
     record,
@@ -154,7 +153,7 @@ export async function processCheckIn(
       workerId: user.workerId,
       name: user.name,
     },
-    message: `Namaste ${user.name}! Check-in recorded at ${formatKolkataTime(serverNow)}.`,
+    message: `Namaste ${user.name}! ${shiftLabel} check-in recorded at ${formatKolkataTime(serverNow)}.`,
   };
 }
 
@@ -416,63 +415,8 @@ export async function getWorkerStatus(userId: string) {
     }
   });
 
-  // Calculate Check-In Window (±30 mins band)
-  let checkInWindow: {
-    shiftStart: string;
-    shiftEnd: string;
-    windowStart: string;
-    windowEnd: string;
-    bandMinutes: number;
-    isOpen: boolean;
-    isTooEarly: boolean;
-    isClosed: boolean;
-    status: 'OPEN' | 'TOO_EARLY' | 'CLOSED';
-  } | null = null;
-
-  if (shift) {
-    let bandMinutes = 30;
-    try {
-      const companySettings = await prisma.companySettings.findUnique({ where: { id: 'default-settings' } });
-      if (companySettings?.attendanceRules) {
-        const parsed = JSON.parse(companySettings.attendanceRules);
-        if (parsed.checkInBandMinutes !== undefined) {
-          bandMinutes = Number(parsed.checkInBandMinutes);
-        }
-      }
-    } catch {}
-
-    const expectedStart = parseKolkataTimeString(shift.startTime, todayDate);
-    let windowStart = new Date(expectedStart.getTime() - bandMinutes * 60 * 1000);
-    let windowEnd = new Date(expectedStart.getTime() + bandMinutes * 60 * 1000);
-
-    const now = new Date();
-    const nowMs = now.getTime();
-    const dayMs = 24 * 60 * 60 * 1000;
-
-    if (Math.abs(nowMs - (expectedStart.getTime() - dayMs)) < Math.abs(nowMs - expectedStart.getTime())) {
-      windowStart = new Date(windowStart.getTime() - dayMs);
-      windowEnd = new Date(windowEnd.getTime() - dayMs);
-    } else if (Math.abs(nowMs - (expectedStart.getTime() + dayMs)) < Math.abs(nowMs - expectedStart.getTime())) {
-      windowStart = new Date(windowStart.getTime() + dayMs);
-      windowEnd = new Date(windowEnd.getTime() + dayMs);
-    }
-
-    const isOpen = nowMs >= windowStart.getTime() && nowMs <= windowEnd.getTime();
-    const isTooEarly = nowMs < windowStart.getTime();
-    const isClosed = nowMs > windowEnd.getTime();
-
-    checkInWindow = {
-      shiftStart: shift.startTime,
-      shiftEnd: shift.endTime,
-      windowStart: formatKolkataTime(windowStart),
-      windowEnd: formatKolkataTime(windowEnd),
-      bandMinutes,
-      isOpen,
-      isTooEarly,
-      isClosed,
-      status: isOpen ? 'OPEN' : isTooEarly ? 'TOO_EARLY' : 'CLOSED',
-    };
-  }
+  // Band timing removed per user instruction - checkInWindow is null (unrestricted)
+  const checkInWindow = null;
 
   return {
     today: {
@@ -483,6 +427,7 @@ export async function getWorkerStatus(userId: string) {
       isCheckedOut,
       checkInAt: todayRecord?.checkInAt || null,
       checkOutAt: todayRecord?.checkOutAt || null,
+      shiftType: todayRecord?.shiftType || null,
       formattedCheckInTime: formatKolkataTime(todayRecord?.checkInAt),
       formattedCheckOutTime: formatKolkataTime(todayRecord?.checkOutAt),
       status: todayRecord?.status || (isCheckedIn ? AttendanceStatuses.PRESENT : 'NOT_MARKED'),
@@ -498,7 +443,7 @@ export async function getWorkerStatus(userId: string) {
       hasCustomWageAccess: Boolean(user.hasCustomWageAccess || user.wageType === 'CUSTOM'),
     },
     shift: shift ? {
-      name: shift.name,
+      name: todayRecord?.shiftType === 'NIGHT' ? 'Night Shift (8:00 PM - 8:00 AM)' : (shift.name || 'Day Shift (8:00 AM - 8:00 PM)'),
       startTime: shift.startTime,
       endTime: shift.endTime,
       gracePeriodMinutes: shift.gracePeriodMinutes,
@@ -555,6 +500,7 @@ export async function getWorkerAttendanceHistory(
     breakMinutes: r.breakMinutes,
     status: r.status,
     lateMinutes: r.lateMinutes,
+    shiftType: r.shiftType || 'DAY',
     machinesOperated: r.machinesOperated ?? null,
     hoursOperated: r.hoursOperated ?? null,
     isMissingCheckOut: r.isMissingCheckOut,
@@ -658,6 +604,7 @@ export async function listAttendanceRecords(params: {
     breakMinutes: r.breakMinutes,
     overtimeMinutes: r.overtimeMinutes,
     lateMinutes: r.lateMinutes,
+    shiftType: r.shiftType || 'DAY',
     machinesOperated: r.machinesOperated ?? null,
     hoursOperated: r.hoursOperated ?? null,
     status: r.status,
@@ -684,6 +631,7 @@ export async function correctAttendanceRecord(
     checkInAt?: string | null;
     checkOutAt?: string | null;
     status?: AttendanceStatusType;
+    shiftType?: string | null;
     machinesOperated?: number | null;
     hoursOperated?: number | null;
     remarks?: string;
@@ -762,6 +710,7 @@ export async function correctAttendanceRecord(
       status: calc.status,
       source: AttendanceSources.MANUAL_CORRECTION,
       isMissingCheckOut: calc.isMissingCheckOut,
+      ...(updateData.shiftType !== undefined ? { shiftType: updateData.shiftType } : {}),
       ...(updateData.machinesOperated !== undefined ? { machinesOperated: updateData.machinesOperated !== null ? Number(updateData.machinesOperated) : null } : {}),
       ...(updateData.hoursOperated !== undefined ? { hoursOperated: updateData.hoursOperated !== null ? Number(updateData.hoursOperated) : null } : {}),
       remarks: updateData.remarks || existing.remarks,

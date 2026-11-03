@@ -48,6 +48,7 @@ export const AttendanceMonitoring: React.FC = () => {
   const [correctionCheckOut, setCorrectionCheckOut] = useState('');
   const [correctionMachinesOperated, setCorrectionMachinesOperated] = useState('');
   const [correctionHoursOperated, setCorrectionHoursOperated] = useState('');
+  const [correctionShiftType, setCorrectionShiftType] = useState<string>('DAY');
   const [correctionStatus, setCorrectionStatus] = useState<string>('PRESENT');
   const [correctionReason, setCorrectionReason] = useState('');
   const [correctionRemarks, setCorrectionRemarks] = useState('');
@@ -113,6 +114,7 @@ export const AttendanceMonitoring: React.FC = () => {
     setCorrectionHoursOperated(
       record.hoursOperated != null ? String(record.hoursOperated) : ''
     );
+    setCorrectionShiftType(record.shiftType === 'NIGHT' ? 'NIGHT' : 'DAY');
     setCorrectionStatus(record.status);
     setCorrectionReason('');
     setCorrectionRemarks(record.remarks || '');
@@ -136,6 +138,7 @@ export const AttendanceMonitoring: React.FC = () => {
         checkInAt: correctionCheckIn ? new Date(correctionCheckIn).toISOString() : null,
         checkOutAt: correctionCheckOut ? new Date(correctionCheckOut).toISOString() : null,
         status: correctionStatus,
+        shiftType: correctionShiftType,
         machinesOperated: correctionMachinesOperated ? parseInt(correctionMachinesOperated, 10) : null,
         hoursOperated: correctionHoursOperated ? parseFloat(correctionHoursOperated) : null,
         remarks: correctionRemarks.trim() || undefined,
@@ -358,6 +361,7 @@ export const AttendanceMonitoring: React.FC = () => {
                   <th className="py-3 px-4">Worker Name</th>
                   <th className="py-3 px-4">Department</th>
                   <th className="py-3 px-4">Date</th>
+                  <th className="py-3 px-4 text-center">Shift</th>
                   <th className="py-3 px-4">Check-In</th>
                   <th className="py-3 px-4">Check-Out</th>
                   <th className="py-3 px-4 text-right">Break</th>
@@ -371,7 +375,7 @@ export const AttendanceMonitoring: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {records.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="py-8 text-center text-slate-400">
+                    <td colSpan={13} className="py-8 text-center text-slate-400">
                       No attendance records found matching filters.
                     </td>
                   </tr>
@@ -383,6 +387,15 @@ export const AttendanceMonitoring: React.FC = () => {
                       <td className="py-3 px-4 text-slate-600">{r.department}</td>
                       <td className="py-3 px-4 text-slate-600">
                         {r.formattedDate} <span className="text-[11px] text-slate-400">({r.dayOfWeek.slice(0, 3)})</span>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md border whitespace-nowrap ${
+                          r.shiftType === 'NIGHT'
+                            ? 'bg-indigo-50 text-indigo-900 border-indigo-200'
+                            : 'bg-amber-50 text-amber-900 border-amber-200'
+                        }`}>
+                          {r.shiftType === 'NIGHT' ? '🌙 Night' : '☀️ Day'}
+                        </span>
                       </td>
                       <td className="py-3 px-4 font-mono text-slate-800">{r.checkInTime}</td>
                       <td className="py-3 px-4 font-mono text-slate-800">
@@ -479,20 +492,34 @@ export const AttendanceMonitoring: React.FC = () => {
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Attendance Status</label>
-            <select
-              value={correctionStatus}
-              onChange={(e) => setCorrectionStatus(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-teal-500"
-            >
-              <option value="PRESENT">PRESENT</option>
-              <option value="LATE">LATE</option>
-              <option value="HALF_DAY">HALF_DAY</option>
-              <option value="ABSENT">ABSENT</option>
-              <option value="ON_LEAVE">ON_LEAVE</option>
-              <option value="HOLIDAY">HOLIDAY</option>
-            </select>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Attendance Status</label>
+              <select
+                value={correctionStatus}
+                onChange={(e) => setCorrectionStatus(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-teal-500"
+              >
+                <option value="PRESENT">PRESENT</option>
+                <option value="LATE">LATE</option>
+                <option value="HALF_DAY">HALF_DAY</option>
+                <option value="ABSENT">ABSENT</option>
+                <option value="ON_LEAVE">ON_LEAVE</option>
+                <option value="HOLIDAY">HOLIDAY</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Shift Type</label>
+              <select
+                value={correctionShiftType}
+                onChange={(e) => setCorrectionShiftType(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-teal-500"
+              >
+                <option value="DAY">☀️ Day Shift</option>
+                <option value="NIGHT">🌙 Night Shift</option>
+              </select>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3 p-3 bg-amber-50/50 rounded-xl border border-amber-200/60">
