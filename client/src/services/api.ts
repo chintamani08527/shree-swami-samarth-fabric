@@ -2,6 +2,8 @@ const isAndroidApp =
   typeof window !== 'undefined' &&
   (window.location.protocol === 'capacitor:' ||
     window.location.protocol === 'file:' ||
+    window.navigator.userAgent.includes('SSF-Android-App') ||
+    Boolean((window as any).AndroidBridge) ||
     (window.location.hostname === 'localhost' && !window.location.port));
 
 const API_BASE =
