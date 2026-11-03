@@ -219,6 +219,7 @@ export async function updateWorker(
   data: {
     name?: string;
     phone?: string;
+    role?: RoleType;
     departmentId?: string | null;
     shiftId?: string;
     wageType?: 'FIXED' | 'CUSTOM';
@@ -242,6 +243,7 @@ export async function updateWorker(
     data: {
       ...(data.name ? { name: data.name.trim() } : {}),
       ...(data.phone !== undefined ? { phone: data.phone ? data.phone.trim() : null } : {}),
+      ...(data.role && existing.workerId !== 'VINAYAK4501' ? { role: data.role } : {}),
       ...(data.departmentId !== undefined ? { departmentId: data.departmentId } : {}),
       ...(data.wageType !== undefined ? { wageType: data.wageType } : {}),
       ...(data.hasCustomWageAccess !== undefined
@@ -307,6 +309,10 @@ export async function deactivateWorker(
 
   const existing = await prisma.user.findUnique({ where: { id } });
   if (!existing) throw new Error('Worker not found');
+
+  if (existing.workerId === 'VINAYAK4501' || existing.role === 'SUPER_ADMIN') {
+    throw new Error('Super Admin account cannot be deactivated.');
+  }
 
   const deactivated = await prisma.user.update({
     where: { id },

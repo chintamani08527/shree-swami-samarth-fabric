@@ -24,7 +24,7 @@ const createWorkerSchema = z.object({
     name: z.string().min(2, 'Full name is required'),
     phone: z.string().optional(),
     passwordOrPin: z.string().min(4, 'PIN/Password must be at least 4 characters'),
-    role: z.enum([Roles.ADMIN, Roles.SUPERVISOR, Roles.WORKER]).optional(),
+    role: z.enum([Roles.SUPER_ADMIN, Roles.ADMIN, Roles.SUPERVISOR, Roles.WORKER]).optional(),
     departmentId: z.string().optional(),
     shiftId: z.string().optional(),
     wageType: z.enum(['FIXED', 'CUSTOM']).optional(),

@@ -9,7 +9,7 @@ import { useAuth } from '../../context/AuthContext.tsx';
 export const DepartmentManagement: React.FC = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
-  const isAdmin = user?.role === 'ADMIN';
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN' || user?.workerId === 'VINAYAK4501';
 
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);

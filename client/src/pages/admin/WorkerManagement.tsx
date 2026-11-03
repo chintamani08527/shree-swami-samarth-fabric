@@ -124,7 +124,8 @@ const SalaryProjectionCard: React.FC<{
 export const WorkerManagement: React.FC = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
-  const isAdmin = user?.role === 'ADMIN';
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN' || user?.workerId === 'VINAYAK4501';
+  const isAdmin = user?.role === 'ADMIN' || isSuperAdmin;
 
   const [workers, setWorkers] = useState<User[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -142,7 +143,7 @@ export const WorkerManagement: React.FC = () => {
   const [newWorkerId, setNewWorkerId] = useState('');
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
-  const [newRole, setNewRole] = useState<'WORKER' | 'SUPERVISOR' | 'ADMIN'>('WORKER');
+  const [newRole, setNewRole] = useState<'WORKER' | 'SUPERVISOR' | 'ADMIN' | 'SUPER_ADMIN'>('WORKER');
   const [newDeptId, setNewDeptId] = useState('');
   const [newShiftId, setNewShiftId] = useState('');
   const [newUnit, setNewUnit] = useState<'Unit 1' | 'Unit 2'>('Unit 1');
@@ -158,6 +159,7 @@ export const WorkerManagement: React.FC = () => {
   const [editingWorker, setEditingWorker] = useState<User | null>(null);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
+  const [editRole, setEditRole] = useState<'WORKER' | 'SUPERVISOR' | 'ADMIN' | 'SUPER_ADMIN'>('WORKER');
   const [editDeptId, setEditDeptId] = useState('');
   const [editShiftId, setEditShiftId] = useState('');
   const [editUnit, setEditUnit] = useState<'Unit 1' | 'Unit 2'>('Unit 1');
@@ -262,6 +264,7 @@ export const WorkerManagement: React.FC = () => {
     setEditingWorker(worker);
     setEditName(worker.name);
     setEditPhone(worker.phone || '');
+    setEditRole((worker.role as any) || 'WORKER');
     setEditDeptId(worker.department?.id || '');
     setEditShiftId(worker.shift?.id || '');
     setEditUnit((worker.unit as any) === 'Unit 2' ? 'Unit 2' : 'Unit 1');
@@ -282,6 +285,7 @@ export const WorkerManagement: React.FC = () => {
       const res = await workersApi.update(editingWorker.id, {
         name: editName.trim(),
         phone: editPhone.trim() || null,
+        role: editRole,
         departmentId: editDeptId || null,
         unit: editUnit,
         wageType: editWageType,
@@ -544,7 +548,7 @@ export const WorkerManagement: React.FC = () => {
                             <KeyRound className="w-4 h-4" />
                           </button>
 
-                          {w.isActive && (
+                          {w.isActive && w.workerId !== 'VINAYAK4501' && w.role !== 'SUPER_ADMIN' && (
                             <button
                               onClick={() => handleOpenDeactivate(w)}
                               title="Deactivate Worker Profile"
@@ -751,11 +755,12 @@ export const WorkerManagement: React.FC = () => {
               <select
                 value={newRole}
                 onChange={(e) => setNewRole(e.target.value as any)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-teal-500"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-teal-500 font-medium"
               >
                 <option value="WORKER">WORKER</option>
                 <option value="SUPERVISOR">SUPERVISOR</option>
                 <option value="ADMIN">ADMIN</option>
+                {isSuperAdmin && <option value="SUPER_ADMIN">SUPER_ADMIN</option>}
               </select>
             </div>
 
@@ -978,20 +983,37 @@ export const WorkerManagement: React.FC = () => {
             )}
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Department</label>
-            <select
-              value={editDeptId}
-              onChange={(e) => setEditDeptId(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-teal-500"
-            >
-              <option value="">Unassigned</option>
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">User Role</label>
+              <select
+                value={editRole}
+                onChange={(e) => setEditRole(e.target.value as any)}
+                disabled={editingWorker?.role === 'SUPER_ADMIN' || editingWorker?.workerId === 'VINAYAK4501'}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-teal-500 font-medium disabled:bg-slate-100 disabled:text-slate-400"
+              >
+                <option value="WORKER">WORKER</option>
+                <option value="SUPERVISOR">SUPERVISOR</option>
+                <option value="ADMIN">ADMIN</option>
+                {isSuperAdmin && <option value="SUPER_ADMIN">SUPER_ADMIN</option>}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Department</label>
+              <select
+                value={editDeptId}
+                onChange={(e) => setEditDeptId(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-teal-500"
+              >
+                <option value="">Unassigned</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/80 text-[11px] text-slate-600 flex items-center gap-2">

@@ -22,7 +22,7 @@ import { useAuth } from '../../context/AuthContext.tsx';
 export const AttendanceMonitoring: React.FC = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
-  const isAdmin = user?.role === 'ADMIN';
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN' || user?.workerId === 'VINAYAK4501';
 
   // State
   const [activeTab, setActiveTab] = useState<'all' | 'live'>('all');
