@@ -151,6 +151,26 @@ export interface WorkerTodayStatus {
   };
 }
 
+export interface DashboardWorkerItem {
+  id: string;
+  workerId: string;
+  name: string;
+  phone?: string | null;
+  unit: string;
+  department: string;
+  shift: string;
+  wageType: 'FIXED' | 'CUSTOM' | string;
+  dailyWage?: number | null;
+  customWageRate?: number | null;
+  status: 'PRESENT' | 'ABSENT' | 'ON_FLOOR' | string;
+  checkInTime?: string | null;
+  checkOutTime?: string | null;
+  lateMinutes?: number;
+  workingMinutes?: number;
+  machinesOperated?: number | null;
+  hoursOperated?: number | null;
+}
+
 export interface DashboardKPIs {
   kpis: {
     totalRegisteredWorkers: number;
@@ -181,6 +201,13 @@ export interface DashboardKPIs {
     absent: number;
     attendanceRate: number;
   }[];
+  workerLists?: {
+    registered: DashboardWorkerItem[];
+    present: DashboardWorkerItem[];
+    absent: DashboardWorkerItem[];
+    onFloor: DashboardWorkerItem[];
+    late: DashboardWorkerItem[];
+  };
 }
 
 export interface AuditLogItem {

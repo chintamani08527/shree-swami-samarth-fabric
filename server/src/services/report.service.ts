@@ -21,12 +21,30 @@ export async function getDashboardKPIs(targetDateStr?: string) {
   }
 
   // 2. Fetch all initial dashboard data in parallel
-  const [totalRegisteredWorkers, todayRecords, all7DaysRecords, departments] = await Promise.all([
-    prisma.user.count({
+  const [allWorkers, todayRecords, all7DaysRecords, departments] = await Promise.all([
+    prisma.user.findMany({
       where: {
         role: Roles.WORKER,
         isActive: true,
       },
+      select: {
+        id: true,
+        workerId: true,
+        name: true,
+        phone: true,
+        unit: true,
+        wageType: true,
+        dailyWage: true,
+        customWageRate: true,
+        hasCustomWageAccess: true,
+        department: { select: { id: true, name: true } },
+        workerShifts: {
+          where: { effectiveTo: null },
+          include: { shift: true },
+          take: 1,
+        },
+      },
+      orderBy: { workerId: 'asc' },
     }),
     prisma.attendanceRecord.findMany({
       where: {
@@ -58,6 +76,8 @@ export async function getDashboardKPIs(targetDateStr?: string) {
       },
     }),
   ]);
+
+  const totalRegisteredWorkers = allWorkers.length;
 
   const presentToday = todayRecords.filter((r) => r.checkInAt !== null).length;
   const currentlyCheckedIn = todayRecords.filter((r) => r.checkInAt !== null && r.checkOutAt === null).length;
@@ -134,6 +154,55 @@ export async function getDashboardKPIs(targetDateStr?: string) {
     };
   });
 
+  // Categorize worker lists for interactive dashboard drilldown
+  const todayRecordByUser = new Map<string, any>();
+  todayRecords.forEach((r) => todayRecordByUser.set(r.userId, r));
+
+  const formatTime = (date?: Date | null) => {
+    if (!date) return null;
+    return new Date(date).toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Kolkata',
+    });
+  };
+
+  const registeredWorkerItems = allWorkers.map((w) => {
+    const rec = todayRecordByUser.get(w.id);
+    const isPresent = Boolean(rec && rec.checkInAt !== null);
+    const isOnFloor = Boolean(isPresent && rec.checkOutAt === null);
+
+    let status: 'PRESENT' | 'ABSENT' | 'ON_FLOOR' = 'ABSENT';
+    if (isOnFloor) status = 'ON_FLOOR';
+    else if (isPresent) status = 'PRESENT';
+
+    return {
+      id: w.id,
+      workerId: w.workerId,
+      name: w.name,
+      phone: w.phone || null,
+      unit: w.unit || 'Unit 1',
+      department: w.department?.name || 'Unassigned',
+      shift: w.workerShifts[0]?.shift?.name || 'General Shift',
+      wageType: w.wageType || 'FIXED',
+      dailyWage: w.dailyWage || null,
+      customWageRate: w.customWageRate || null,
+      status,
+      checkInTime: formatTime(rec?.checkInAt),
+      checkOutTime: formatTime(rec?.checkOutAt),
+      lateMinutes: rec?.lateMinutes || 0,
+      workingMinutes: rec?.workingMinutes || 0,
+      machinesOperated: rec?.machinesOperated ?? null,
+      hoursOperated: rec?.hoursOperated ?? null,
+    };
+  });
+
+  const presentWorkerItems = registeredWorkerItems.filter((w) => w.status === 'PRESENT' || w.status === 'ON_FLOOR');
+  const absentWorkerItems = registeredWorkerItems.filter((w) => w.status === 'ABSENT');
+  const onFloorWorkerItems = registeredWorkerItems.filter((w) => w.status === 'ON_FLOOR');
+  const lateWorkerItems = registeredWorkerItems.filter((w) => (w.lateMinutes || 0) > 0);
+
   return {
     kpis: {
       totalRegisteredWorkers,
@@ -148,6 +217,13 @@ export async function getDashboardKPIs(targetDateStr?: string) {
     },
     trend: trendDays,
     departmentBreakdown,
+    workerLists: {
+      registered: registeredWorkerItems,
+      present: presentWorkerItems,
+      absent: absentWorkerItems,
+      onFloor: onFloorWorkerItems,
+      late: lateWorkerItems,
+    },
   };
 }
 
