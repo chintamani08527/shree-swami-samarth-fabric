@@ -8,9 +8,9 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "prisma:generate": "prisma generate",
+    "prisma:generate": "node scripts/generate-prisma.js",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:push": "prisma db push",
+    "prisma:push": "node scripts/push-prisma.js",
     "prisma:seed": "tsx prisma/seed.ts",
     "test": "vitest run"
   },

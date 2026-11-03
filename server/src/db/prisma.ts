@@ -97,6 +97,62 @@ export async function ensureDatabaseReady() {
       });
       console.log('✅ Created Owner Vinayak Ginde account.');
     }
+
+    // Ensure default shifts exist
+    const defaultShift = await prisma.shift.findFirst();
+    if (!defaultShift) {
+      await prisma.shift.createMany({
+        data: [
+          {
+            name: 'General Shift (8:30 AM - 5:30 PM)',
+            startTime: '08:30',
+            endTime: '17:30',
+            gracePeriodMinutes: 15,
+            breakDurationMinutes: 60,
+            halfDayThresholdHours: 4.0,
+            fullDayThresholdHours: 8.0,
+            isActive: true,
+          },
+          {
+            name: 'Day Shift (7:00 AM - 3:30 PM)',
+            startTime: '07:00',
+            endTime: '15:30',
+            gracePeriodMinutes: 15,
+            breakDurationMinutes: 30,
+            halfDayThresholdHours: 4.0,
+            fullDayThresholdHours: 8.0,
+            isActive: true,
+          },
+          {
+            name: 'Night Shift (7:00 PM - 3:30 AM)',
+            startTime: '19:00',
+            endTime: '03:30',
+            gracePeriodMinutes: 15,
+            breakDurationMinutes: 30,
+            halfDayThresholdHours: 4.0,
+            fullDayThresholdHours: 8.0,
+            isActive: true,
+          },
+        ],
+      });
+      console.log('✅ Created default Shifts.');
+    }
+
+    // Ensure default departments exist
+    const defaultDept = await prisma.department.findFirst();
+    if (!defaultDept) {
+      await prisma.department.createMany({
+        data: [
+          { name: 'Weaving', description: 'Power loom & automatic shuttleless loom weaving operations', isActive: true },
+          { name: 'Jacquard', description: 'Intricate pattern fabric & jacquard weaving division', isActive: true },
+          { name: 'Spinning', description: 'Raw fiber carding, drawing, roving, and yarn ring spinning', isActive: true },
+          { name: 'Dyeing & Printing', description: 'Yarn and fabric bleaching, dyeing, and rotary printing', isActive: true },
+          { name: 'Quality Control', description: 'GSM checking, defect grading, and yarn strength testing', isActive: true },
+          { name: 'Maintenance & Utility', description: 'Looms repair, boiler maintenance, and electrical support', isActive: true },
+        ],
+      });
+      console.log('✅ Created default Departments.');
+    }
   } catch (error) {
     console.error('ensureDatabaseReady warning:', error);
   }

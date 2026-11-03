@@ -43,8 +43,13 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       select: { id: true, workerId: true, name: true, role: true, departmentId: true, isActive: true },
     });
 
-    if (!user || !user.isActive) {
-      res.status(401).json({ success: false, message: 'User account is deactivated or not found.' });
+    if (!user) {
+      res.status(401).json({ success: false, message: 'Worker account not found. Please log in again.' });
+      return;
+    }
+
+    if (!user.isActive) {
+      res.status(403).json({ success: false, message: 'This worker account has been deactivated by administrator.' });
       return;
     }
 

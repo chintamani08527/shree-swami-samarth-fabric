@@ -82,8 +82,12 @@ export async function getCurrentUserProfile(userId: string) {
     },
   });
 
-  if (!user || !user.isActive) {
-    throw new Error('User account not found or inactive.');
+  if (!user) {
+    throw new Error('User account not found. Please log in again.');
+  }
+
+  if (!user.isActive) {
+    throw new Error('This account has been deactivated. Please contact your factory supervisor or admin.');
   }
 
   const activeShift = user.workerShifts[0]?.shift || null;

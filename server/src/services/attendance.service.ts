@@ -41,8 +41,12 @@ export async function processCheckIn(
     },
   });
 
-  if (!user || !user.isActive) {
-    throw new Error('Worker profile not found or inactive.');
+  if (!user) {
+    throw new Error('Worker profile not found. Please log in again.');
+  }
+
+  if (!user.isActive) {
+    throw new Error('Worker account has been deactivated by administrator.');
   }
 
   // Check for existing record today
@@ -183,8 +187,12 @@ export async function processCheckOut(
     },
   });
 
-  if (!user || !user.isActive) {
-    throw new Error('Worker profile not found or inactive.');
+  if (!user) {
+    throw new Error('Worker profile not found. Please log in again.');
+  }
+
+  if (!user.isActive) {
+    throw new Error('Worker account has been deactivated by administrator.');
   }
 
   // Find today's open attendance record
@@ -296,8 +304,12 @@ export async function logCustomWageWork(
   const attendanceDate = getKolkataDateString(serverNow);
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user || !user.isActive) {
-    throw new Error('Worker profile not found or inactive.');
+  if (!user) {
+    throw new Error('Worker profile not found. Please log in again.');
+  }
+
+  if (!user.isActive) {
+    throw new Error('Worker account has been deactivated by administrator.');
   }
 
   if (!user.hasCustomWageAccess && user.wageType !== 'CUSTOM') {

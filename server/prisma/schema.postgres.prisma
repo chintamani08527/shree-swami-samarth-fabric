@@ -1,7 +1,8 @@
-// Prisma Schema for Shree Swami Samarth Fabric Attendance Management System
+// Prisma Schema for Shree Swami Samarth Fabric Attendance Management System (PostgreSQL Cloud / Production)
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -9,47 +10,27 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  ADMIN
-  SUPERVISOR
-  WORKER
-}
-
-enum AttendanceStatus {
-  PRESENT
-  LATE
-  HALF_DAY
-  ABSENT
-  ON_LEAVE
-  HOLIDAY
-}
-
-enum AttendanceSource {
-  WEB_MOBILE
-  WEB_DESKTOP
-  MANUAL_CORRECTION
-  ADMIN_OVERRIDE
-}
-
 model User {
-  id           String    @id @default(uuid())
-  workerId     String    @unique // e.g. SSF-001, ADM-001, SUP-001
-  name         String
-  phone        String?
-  passwordHash String
-  role         Role      @default(WORKER)
-  dailyWage    Float?    // Daily wage or pay rate (₹)
-  isActive     Boolean   @default(true)
-  joiningDate  DateTime  @default(now())
-  departmentId String?
-  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  id                  String             @id @default(uuid())
+  workerId            String             @unique // e.g. SSF-001, ADM-001, SUP-001
+  name                String
+  phone               String?
+  passwordHash        String
+  role                String             @default("WORKER") // ADMIN, SUPERVISOR, WORKER
+  wageType            String             @default("FIXED") // FIXED or CUSTOM
+  dailyWage           Float? // Fixed Daily wage or pay rate (₹)
+  hasCustomWageAccess Boolean            @default(false) // Custom wage entry access granted by admin
+  isActive            Boolean            @default(true)
+  joiningDate         DateTime           @default(now())
+  departmentId        String?
+  department          Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
 
-  attendanceRecords AttendanceRecord[]
-  workerShifts      WorkerShift[]
-  auditLogs         AuditLog[]
+  attendanceRecords   AttendanceRecord[]
+  workerShifts        WorkerShift[]
+  auditLogs           AuditLog[]
 
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
   @@index([workerId])
   @@index([role])
@@ -70,24 +51,27 @@ model Department {
 }
 
 model AttendanceRecord {
-  id                String           @id @default(uuid())
+  id                String    @id @default(uuid())
   userId            String
-  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   workerId          String
-  attendanceDate    String           // YYYY-MM-DD format (Asia/Kolkata date)
-  checkInAt         DateTime?        // UTC timestamp
-  checkOutAt        DateTime?        // UTC timestamp
-  status            AttendanceStatus @default(PRESENT)
-  source            AttendanceSource @default(WEB_MOBILE)
-  workingMinutes    Int              @default(0) // actual working minutes excluding break
-  breakMinutes      Int              @default(0) // deducted break minutes
-  overtimeMinutes   Int              @default(0) // overtime minutes beyond shift
-  lateMinutes       Int              @default(0) // late arrival minutes beyond grace period
-  isMissingCheckOut Boolean          @default(false)
-  remarks           String?          // Notes, correction reasons, etc.
+  attendanceDate    String    // YYYY-MM-DD format (Asia/Kolkata date)
+  checkInAt         DateTime? // UTC timestamp
+  checkOutAt        DateTime? // UTC timestamp
+  shiftType         String?   @default("DAY") // DAY or NIGHT (worker selected)
+  status            String    @default("PRESENT") // PRESENT, LATE, HALF_DAY, ABSENT, ON_LEAVE, HOLIDAY
+  source            String    @default("WEB_MOBILE") // WEB_MOBILE, WEB_DESKTOP, MANUAL_CORRECTION, ADMIN_OVERRIDE
+  workingMinutes    Int       @default(0) // actual working minutes excluding break
+  breakMinutes      Int       @default(0) // deducted break minutes
+  overtimeMinutes   Int       @default(0) // overtime minutes beyond shift
+  lateMinutes       Int       @default(0) // late arrival minutes beyond grace period
+  machinesOperated  Int?      // Custom wages: count of machines operated
+  hoursOperated     Float?    // Custom wages: total hours machines operated
+  isMissingCheckOut Boolean   @default(false)
+  remarks           String?   // Notes, correction reasons, etc.
 
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@unique([userId, attendanceDate])
   @@index([attendanceDate])
@@ -146,10 +130,10 @@ model AuditLog {
 }
 
 model CompanySettings {
-  id                   String   @id @default("default-settings")
-  companyName          String   @default("Shree Swami Samarth Fabric")
-  timezone             String   @default("Asia/Kolkata")
-  defaultWorkingHours  Float    @default(8.0)
-  attendanceRules      String   // JSON string of rules (gracePeriod, breakDuration, autoAbsenceTime, etc.)
-  updatedAt            DateTime @updatedAt
+  id                  String   @id @default("default-settings")
+  companyName         String   @default("Shree Swami Samarth Fabric")
+  timezone            String   @default("Asia/Kolkata")
+  defaultWorkingHours Float    @default(8.0)
+  attendanceRules     String   // JSON string of rules
+  updatedAt           DateTime @updatedAt
 }

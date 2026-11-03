@@ -169,6 +169,7 @@ export async function createWorker(
       dailyWage: isCustom ? null : (data.dailyWage !== undefined && data.dailyWage !== null ? Number(data.dailyWage) : null),
       hasCustomWageAccess,
       departmentId: data.departmentId || null,
+      isActive: true,
       joiningDate: data.joiningDate ? new Date(data.joiningDate) : new Date(),
     },
     include: { department: true },
