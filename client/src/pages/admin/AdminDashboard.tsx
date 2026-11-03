@@ -37,9 +37,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
   const [data, setData] = useState<DashboardKPIs | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadDashboard = async () => {
+  const loadDashboard = async (forceSpinner: boolean | any = false) => {
     try {
-      setLoading(true);
+      if (forceSpinner === true || !data) {
+        setLoading(true);
+      }
       const res = await reportsApi.getDashboard();
       if (res.success) {
         setData(res.data);

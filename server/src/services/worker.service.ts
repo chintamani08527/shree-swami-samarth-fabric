@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../db/prisma.js';
 import { RoleType, Roles } from '../config/index.js';
 import { logAudit } from '../middleware/audit.js';
+import { invalidateAuthCache } from '../middleware/auth.js';
 
 export async function listWorkers(params: {
   search?: string;
@@ -269,6 +270,8 @@ export async function updateWorker(
     details: { previous: existing, updated: data },
   });
 
+  invalidateAuthCache(id);
+
   return updated;
 }
 
@@ -298,6 +301,8 @@ export async function deactivateWorker(
     reason: reason.trim(),
     details: { workerId: existing.workerId, name: existing.name },
   });
+
+  invalidateAuthCache(id);
 
   return deactivated;
 }
@@ -330,6 +335,8 @@ export async function resetWorkerCredentials(
     reason: `PIN / password reset securely by admin ${adminActor.name}`,
     details: { workerId: existing.workerId, name: existing.name },
   });
+
+  invalidateAuthCache(id);
 
   return { message: `Credentials successfully reset for worker ${existing.workerId}.` };
 }

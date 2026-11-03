@@ -13,29 +13,51 @@ import { subDays } from 'date-fns';
 export async function getDashboardKPIs(targetDateStr?: string) {
   const dateStr = targetDateStr || getKolkataDateString(new Date());
 
-  // 1. Total active workers
-  const totalRegisteredWorkers = await prisma.user.count({
-    where: {
-      role: Roles.WORKER,
-      isActive: true,
-    },
-  });
+  // 1. Prepare 7 days dates for trend
+  const baseDate = new Date();
+  const dateList: string[] = [];
+  for (let i = 6; i >= 0; i--) {
+    dateList.push(getKolkataDateString(subDays(baseDate, i)));
+  }
 
-  // 2. Attendance records today
-  const todayRecords = await prisma.attendanceRecord.findMany({
-    where: {
-      attendanceDate: dateStr,
-      user: {
+  // 2. Fetch all initial dashboard data in parallel
+  const [totalRegisteredWorkers, todayRecords, all7DaysRecords, departments] = await Promise.all([
+    prisma.user.count({
+      where: {
         role: Roles.WORKER,
         isActive: true,
       },
-    },
-    include: {
-      user: {
-        include: { department: true },
+    }),
+    prisma.attendanceRecord.findMany({
+      where: {
+        attendanceDate: dateStr,
+        user: {
+          role: Roles.WORKER,
+          isActive: true,
+        },
       },
-    },
-  });
+      include: {
+        user: {
+          include: { department: true },
+        },
+      },
+    }),
+    prisma.attendanceRecord.findMany({
+      where: {
+        attendanceDate: { in: dateList },
+        user: { role: Roles.WORKER, isActive: true },
+      },
+    }),
+    prisma.department.findMany({
+      where: { isActive: true },
+      include: {
+        users: {
+          where: { role: Roles.WORKER, isActive: true },
+          select: { id: true },
+        },
+      },
+    }),
+  ]);
 
   const presentToday = todayRecords.filter((r) => r.checkInAt !== null).length;
   const currentlyCheckedIn = todayRecords.filter((r) => r.checkInAt !== null && r.checkOutAt === null).length;
@@ -56,7 +78,14 @@ export async function getDashboardKPIs(targetDateStr?: string) {
   const totalWorkingHoursToday = Number((totalMinutesToday / 60).toFixed(1));
   const absentToday = Math.max(0, totalRegisteredWorkers - presentToday);
 
-  // 3. Last 7 days attendance trend
+  // Group 7-day records by attendanceDate in memory (0 DB overhead)
+  const recordsByDate = new Map<string, any[]>();
+  all7DaysRecords.forEach((r) => {
+    const list = recordsByDate.get(r.attendanceDate) || [];
+    list.push(r);
+    recordsByDate.set(r.attendanceDate, list);
+  });
+
   const trendDays: {
     date: string;
     formattedDate: string;
@@ -67,19 +96,8 @@ export async function getDashboardKPIs(targetDateStr?: string) {
     hours: number;
   }[] = [];
 
-  const baseDate = new Date();
-  for (let i = 6; i >= 0; i--) {
-    const d = subDays(baseDate, i);
-    const dStr = getKolkataDateString(d);
-    
-    // In production this could be cached or grouped, here we fetch cleanly
-    const dayRecords = await prisma.attendanceRecord.findMany({
-      where: {
-        attendanceDate: dStr,
-        user: { role: Roles.WORKER, isActive: true },
-      },
-    });
-
+  for (const dStr of dateList) {
+    const dayRecords = recordsByDate.get(dStr) || [];
     const dayPresent = dayRecords.filter((r) => r.checkInAt !== null).length;
     const dayLate = dayRecords.filter((r) => r.lateMinutes > 0).length;
     const dayMinutes = dayRecords.reduce((acc, curr) => acc + (curr.workingMinutes || 0), 0);
@@ -95,17 +113,7 @@ export async function getDashboardKPIs(targetDateStr?: string) {
     });
   }
 
-  // 4. Department-wise breakdown
-  const departments = await prisma.department.findMany({
-    where: { isActive: true },
-    include: {
-      users: {
-        where: { role: Roles.WORKER, isActive: true },
-        select: { id: true },
-      },
-    },
-  });
-
+  // Department-wise breakdown
   const departmentBreakdown = departments.map((dept) => {
     const deptUserIds = new Set(dept.users.map((u) => u.id));
     const deptTodayRecords = todayRecords.filter((r) => deptUserIds.has(r.userId));

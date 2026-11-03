@@ -17,6 +17,20 @@ import {
 } from '../config/index.js';
 import { logAudit } from '../middleware/audit.js';
 
+// In-memory cache for default shift (5-minute TTL)
+let cachedDefaultShift: any = null;
+let cachedShiftTime = 0;
+
+async function getDefaultActiveShift() {
+  const now = Date.now();
+  if (cachedDefaultShift && now - cachedShiftTime < 300000) {
+    return cachedDefaultShift;
+  }
+  cachedDefaultShift = await prisma.shift.findFirst({ where: { isActive: true } });
+  cachedShiftTime = now;
+  return cachedDefaultShift;
+}
+
 /**
  * Worker check-in action
  */
@@ -29,17 +43,27 @@ export async function processCheckIn(
   const serverNow = new Date(); // Server-authoritative timestamp
   const attendanceDate = getKolkataDateString(serverNow);
 
-  // Fetch worker and active shift
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: {
-      workerShifts: {
-        where: { effectiveTo: null },
-        include: { shift: true },
-        take: 1,
+  // Fetch worker and active record in parallel
+  const [user, existingRecord] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        workerShifts: {
+          where: { effectiveTo: null },
+          include: { shift: true },
+          take: 1,
+        },
       },
-    },
-  });
+    }),
+    prisma.attendanceRecord.findUnique({
+      where: {
+        userId_attendanceDate: {
+          userId,
+          attendanceDate,
+        },
+      },
+    }),
+  ]);
 
   if (!user) {
     throw new Error('Worker profile not found. Please log in again.');
@@ -48,16 +72,6 @@ export async function processCheckIn(
   if (!user.isActive) {
     throw new Error('Worker account has been deactivated by administrator.');
   }
-
-  // Check for existing record today
-  const existingRecord = await prisma.attendanceRecord.findUnique({
-    where: {
-      userId_attendanceDate: {
-        userId,
-        attendanceDate,
-      },
-    },
-  });
 
   if (existingRecord && existingRecord.checkInAt) {
     throw new Error(
@@ -357,31 +371,42 @@ export async function logCustomWageWork(
  */
 export async function getWorkerStatus(userId: string) {
   const todayDate = getKolkataDateString(new Date());
+  const weekInfo = getWeekDateRange(todayDate);
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: {
-      department: true,
-      workerShifts: {
-        where: { effectiveTo: null },
-        include: { shift: true },
-        take: 1,
+  // Parallelize user, today record, and weekly records lookups
+  const [user, todayRecord, weeklyRecords] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        department: true,
+        workerShifts: {
+          where: { effectiveTo: null },
+          include: { shift: true },
+          take: 1,
+        },
       },
-    },
-  });
+    }),
+    prisma.attendanceRecord.findUnique({
+      where: {
+        userId_attendanceDate: {
+          userId,
+          attendanceDate: todayDate,
+        },
+      },
+    }),
+    prisma.attendanceRecord.findMany({
+      where: {
+        userId,
+        attendanceDate: {
+          in: weekInfo.dates,
+        },
+      },
+    }),
+  ]);
 
   if (!user) throw new Error('Worker not found');
 
-  const shift = user.workerShifts[0]?.shift || await prisma.shift.findFirst({ where: { isActive: true } });
-
-  const todayRecord = await prisma.attendanceRecord.findUnique({
-    where: {
-      userId_attendanceDate: {
-        userId,
-        attendanceDate: todayDate,
-      },
-    },
-  });
+  const shift = user.workerShifts[0]?.shift || await getDefaultActiveShift();
 
   // Calculate live working duration if checked in and not checked out
   let liveDurationMinutes = 0;
@@ -403,17 +428,6 @@ export async function getWorkerStatus(userId: string) {
       liveDurationMinutes = Math.max(0, rawElapsed - breakDed);
     }
   }
-
-  // Weekly summary
-  const weekInfo = getWeekDateRange(todayDate);
-  const weeklyRecords = await prisma.attendanceRecord.findMany({
-    where: {
-      userId,
-      attendanceDate: {
-        in: weekInfo.dates,
-      },
-    },
-  });
 
   let totalWeeklyMinutes = 0;
   let daysPresent = 0;

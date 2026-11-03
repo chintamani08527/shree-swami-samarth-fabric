@@ -40,23 +40,34 @@ function resolveDatabaseUrl(): string {
 const activeDbUrl = resolveDatabaseUrl();
 process.env.DATABASE_URL = activeDbUrl;
 
-export const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: activeDbUrl,
+const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
+
+export const prisma =
+  globalForPrisma.prisma ||
+  new PrismaClient({
+    datasources: {
+      db: {
+        url: activeDbUrl,
+      },
     },
-  },
-  log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
-});
+    log: ['error'],
+  });
+
+globalForPrisma.prisma = prisma;
+
+let isDbInitialized = false;
 
 export async function ensureDatabaseReady() {
+  if (isDbInitialized) return;
   try {
-    await prisma.$connect();
-
-    // Ensure company settings exist
+    // Check if company settings already exist
     const settings = await prisma.companySettings.findUnique({
       where: { id: 'default-settings' },
     });
+    if (settings) {
+      isDbInitialized = true;
+      return;
+    }
     if (!settings) {
       await prisma.companySettings.create({
         data: {
@@ -153,6 +164,7 @@ export async function ensureDatabaseReady() {
       });
       console.log('✅ Created default Departments.');
     }
+    isDbInitialized = true;
   } catch (error) {
     console.error('ensureDatabaseReady warning:', error);
   }

@@ -4,7 +4,9 @@
   "outputDirectory": "client/dist",
   "functions": {
     "api/index.js": {
-      "includeFiles": "server/**"
+      "includeFiles": "server/**",
+      "memory": 1024,
+      "maxDuration": 15
     }
   },
   "rewrites": [

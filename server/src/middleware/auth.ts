@@ -19,6 +19,29 @@ declare global {
   }
 }
 
+interface CachedAuthUser {
+  user: {
+    id: string;
+    workerId: string;
+    name: string;
+    role: RoleType;
+    departmentId: string | null;
+    isActive: boolean;
+  };
+  expiresAt: number;
+}
+
+const authCache = new Map<string, CachedAuthUser>();
+const AUTH_CACHE_TTL_MS = 30000; // 30 seconds
+
+export function invalidateAuthCache(userId?: string) {
+  if (userId) {
+    authCache.delete(userId);
+  } else {
+    authCache.clear();
+  }
+}
+
 export async function authenticate(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     let token: string | undefined;
@@ -37,28 +60,47 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
 
     const decoded = jwt.verify(token, config.jwtSecret) as { id: string; workerId: string; role: RoleType };
     
-    // Verify user still exists and is active
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
-      select: { id: true, workerId: true, name: true, role: true, departmentId: true, isActive: true },
-    });
+    // Check in-memory cache first to avoid redundant DB roundtrips
+    const now = Date.now();
+    let cached = authCache.get(decoded.id);
 
-    if (!user) {
-      res.status(401).json({ success: false, message: 'Worker account not found. Please log in again.' });
-      return;
+    if (!cached || now > cached.expiresAt) {
+      const dbUser = await prisma.user.findUnique({
+        where: { id: decoded.id },
+        select: { id: true, workerId: true, name: true, role: true, departmentId: true, isActive: true },
+      });
+
+      if (!dbUser) {
+        authCache.delete(decoded.id);
+        res.status(401).json({ success: false, message: 'Worker account not found. Please log in again.' });
+        return;
+      }
+
+      cached = {
+        user: {
+          id: dbUser.id,
+          workerId: dbUser.workerId,
+          name: dbUser.name,
+          role: dbUser.role as RoleType,
+          departmentId: dbUser.departmentId,
+          isActive: dbUser.isActive,
+        },
+        expiresAt: now + AUTH_CACHE_TTL_MS,
+      };
+      authCache.set(decoded.id, cached);
     }
 
-    if (!user.isActive) {
+    if (!cached.user.isActive) {
       res.status(403).json({ success: false, message: 'This worker account has been deactivated by administrator.' });
       return;
     }
 
     req.user = {
-      id: user.id,
-      workerId: user.workerId,
-      name: user.name,
-      role: user.role as RoleType,
-      departmentId: user.departmentId,
+      id: cached.user.id,
+      workerId: cached.user.workerId,
+      name: cached.user.name,
+      role: cached.user.role,
+      departmentId: cached.user.departmentId,
     };
 
     next();

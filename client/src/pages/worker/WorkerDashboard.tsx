@@ -58,9 +58,11 @@ export const WorkerDashboard: React.FC = () => {
   );
 
   // Load worker today status and attendance history
-  const loadData = async () => {
+  const loadData = async (forceSpinner: boolean | any = false) => {
     try {
-      setLoading(true);
+      if (forceSpinner === true || !statusData) {
+        setLoading(true);
+      }
       const [statusRes, historyRes] = await Promise.all([
         attendanceApi.getMyStatus(),
         attendanceApi.getMyHistory(),
