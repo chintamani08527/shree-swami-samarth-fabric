@@ -4,14 +4,21 @@ import android.annotation.SuppressLint
 import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.URLUtil
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -26,12 +33,15 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 
 class MainActivity : ComponentActivity() {
 
+    private lateinit var swipeRefreshLayout: SwipeRefreshLayout
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
+    private var backPressedTime: Long = 0
 
     private val fileChooserLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -57,6 +67,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Set status bar color to deep slate brand theme
+        window.statusBarColor = 0xFF0F172A.toInt()
+
         // Root container
         val rootLayout = FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(
@@ -66,13 +79,37 @@ class MainActivity : ComponentActivity() {
             setBackgroundColor(0xFF0F172A.toInt()) // Deep slate brand background
         }
 
-        // WebView
+        // Swipe to Refresh Layout
+        swipeRefreshLayout = SwipeRefreshLayout(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            setColorSchemeColors(0xFF0284C7.toInt(), 0xFF6366F1.toInt()) // Cyan & Indigo
+            setProgressBackgroundColorSchemeColor(0xFF1E293B.toInt()) // Dark slate container
+            setOnRefreshListener {
+                if (isOnline()) {
+                    webView.reload()
+                } else {
+                    webView.loadUrl(OFFLINE_URL)
+                    isRefreshing = false
+                }
+            }
+        }
+
+        // Hardware-accelerated WebView
         webView = WebView(this).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
             overScrollMode = View.OVER_SCROLL_NEVER
+            setLayerType(View.LAYER_TYPE_HARDWARE, null)
+        }
+
+        // Only allow pull-to-refresh when at the top of the page
+        webView.viewTreeObserver.addOnScrollChangedListener {
+            swipeRefreshLayout.isEnabled = (webView.scrollY == 0)
         }
 
         // Horizontal progress bar
@@ -86,7 +123,8 @@ class MainActivity : ComponentActivity() {
             visibility = View.GONE
         }
 
-        rootLayout.addView(webView)
+        swipeRefreshLayout.addView(webView)
+        rootLayout.addView(swipeRefreshLayout)
         rootLayout.addView(progressBar)
         setContentView(rootLayout)
 
@@ -94,6 +132,7 @@ class MainActivity : ComponentActivity() {
         setupClients()
         setupDownloadListener()
         setupBackNavigation()
+        setupNetworkListener()
 
         loadApplication()
     }
@@ -117,6 +156,9 @@ class MainActivity : ComponentActivity() {
             setAcceptCookie(true)
             setAcceptThirdPartyCookies(webView, true)
         }
+
+        // Native bridge for web-app coordination
+        webView.addJavascriptInterface(WebAppBridge(this), "AndroidBridge")
     }
 
     private fun setupClients() {
@@ -127,6 +169,7 @@ class MainActivity : ComponentActivity() {
                     progressBar.progress = newProgress
                 } else {
                     progressBar.visibility = View.GONE
+                    swipeRefreshLayout.isRefreshing = false
                 }
             }
 
@@ -153,6 +196,18 @@ class MainActivity : ComponentActivity() {
         }
 
         webView.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                progressBar.visibility = View.VISIBLE
+            }
+
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                progressBar.visibility = View.GONE
+                swipeRefreshLayout.isRefreshing = false
+                CookieManager.getInstance().flush()
+            }
+
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
                 return handleUrl(url)
@@ -217,10 +272,35 @@ class MainActivity : ComponentActivity() {
                 if (webView.canGoBack()) {
                     webView.goBack()
                 } else {
-                    finish()
+                    if (System.currentTimeMillis() - backPressedTime < 2000) {
+                        finish()
+                    } else {
+                        backPressedTime = System.currentTimeMillis()
+                        Toast.makeText(this@MainActivity, "Press back again to exit", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         })
+    }
+
+    private fun setupNetworkListener() {
+        try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+            val request = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+
+            cm.registerNetworkCallback(request, object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    runOnUiThread {
+                        val currentUrl = webView.url
+                        if (currentUrl == null || currentUrl.startsWith("file:///android_asset")) {
+                            webView.loadUrl(LIVE_URL)
+                        }
+                    }
+                }
+            })
+        } catch (_: Exception) {}
     }
 
     private fun loadApplication() {
@@ -241,15 +321,40 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         webView.onResume()
+        CookieManager.getInstance().flush()
     }
 
     override fun onPause() {
         webView.onPause()
+        CookieManager.getInstance().flush()
         super.onPause()
     }
 
     override fun onDestroy() {
         webView.destroy()
         super.onDestroy()
+    }
+
+    // JavaScript Bridge for Web-to-App coordination
+    inner class WebAppBridge(private val context: Context) {
+        @JavascriptInterface
+        fun showToast(message: String) {
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+
+        @JavascriptInterface
+        fun isNativeApp(): Boolean {
+            return true
+        }
+
+        @JavascriptInterface
+        fun triggerHaptic() {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                    vibrator?.vibrate(VibrationEffect.createOneShot(80, VibrationEffect.DEFAULT_AMPLITUDE))
+                }
+            } catch (_: Exception) {}
+        }
     }
 }
