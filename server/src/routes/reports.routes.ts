@@ -9,6 +9,7 @@ import {
   generateWeeklyExcelReport,
   generateMonthlyExcelReport,
   generateYearlyExcelReport,
+  generateSalaryExcelReport,
 } from '../services/excel.service.js';
 import { authenticate } from '../middleware/auth.js';
 import { requireSupervisorOrAdmin, requireAdmin } from '../middleware/roles.js';
@@ -155,6 +156,36 @@ router.get('/yearly/export', requireSupervisorOrAdmin, async (req: Request, res:
     );
 
     const filename = `SSF_Yearly_Attendance_${year || 'Current'}.xlsx`;
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(Buffer.from(buffer));
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 8. Dedicated Salary Calculation Excel Export (Clean 6 Columns)
+router.get('/salary/export', requireSupervisorOrAdmin, async (req: Request, res: Response) => {
+  try {
+    const { refDate, periodType, departmentId } = req.query;
+
+    let targetDeptId = departmentId as string | undefined;
+    if (req.user?.role === Roles.SUPERVISOR && req.user.departmentId) {
+      targetDeptId = req.user.departmentId;
+    }
+
+    const buffer = await generateSalaryExcelReport(
+      refDate as string,
+      (periodType as any) || 'MONTHLY',
+      targetDeptId,
+      req.user!.name
+    );
+
+    const filename = `SSF_Salary_Calculation_${refDate || 'Current'}.xlsx`;
 
     res.setHeader(
       'Content-Type',

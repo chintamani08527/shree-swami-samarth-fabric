@@ -302,6 +302,36 @@ export const reportsApi = {
     a.remove();
     window.URL.revokeObjectURL(downloadUrl);
   },
+
+  downloadSalaryExcel: async (refDate?: string, periodType: 'MONTHLY' | 'WEEKLY' = 'MONTHLY', departmentId?: string) => {
+    const token = getAuthToken();
+    const params = new URLSearchParams();
+    if (refDate) params.append('refDate', refDate);
+    if (periodType) params.append('periodType', periodType);
+    if (departmentId) params.append('departmentId', departmentId);
+
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${API_BASE}/reports/salary/export?${params.toString()}`, {
+      headers,
+      credentials: 'include',
+    });
+
+    if (!res.ok) {
+      throw new Error('Failed to generate salary calculation Excel report');
+    }
+
+    const blob = await res.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = `SSF_Salary_Calculation_${refDate || 'Current'}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(downloadUrl);
+  },
 };
 
 // 5. Departments API

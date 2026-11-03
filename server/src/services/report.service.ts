@@ -192,6 +192,8 @@ export async function getWeeklyAttendanceReport(refDateStr?: string, departmentI
     let daysLate = 0;
     let totalOvertimeMinutes = 0;
     let totalBreakMinutes = 0;
+    let totalMachinesOperated = 0;
+    let totalCustomHoursOperated = 0;
 
     const dailyBreakdown = week.dates.map((dateStr) => {
       const rec = recordByDate.get(dateStr);
@@ -201,6 +203,8 @@ export async function getWeeklyAttendanceReport(refDateStr?: string, departmentI
         totalOvertimeMinutes += rec.overtimeMinutes;
         totalBreakMinutes += rec.breakMinutes;
         if (rec.lateMinutes > 0) daysLate += 1;
+        if (rec.machinesOperated) totalMachinesOperated += rec.machinesOperated;
+        if (rec.hoursOperated) totalCustomHoursOperated += rec.hoursOperated;
 
         return {
           date: dateStr,
@@ -208,6 +212,8 @@ export async function getWeeklyAttendanceReport(refDateStr?: string, departmentI
           workingHours: Number((rec.workingMinutes / 60).toFixed(2)),
           lateMinutes: rec.lateMinutes,
           isMissingCheckOut: rec.isMissingCheckOut,
+          machinesOperated: rec.machinesOperated ?? null,
+          hoursOperated: rec.hoursOperated ?? null,
         };
       }
       return {
@@ -216,8 +222,38 @@ export async function getWeeklyAttendanceReport(refDateStr?: string, departmentI
         workingHours: 0,
         lateMinutes: 0,
         isMissingCheckOut: false,
+        machinesOperated: null,
+        hoursOperated: null,
       };
     });
+
+    const totalWorkingHours = Number((totalMinutes / 60).toFixed(2));
+    const totalOvertimeHours = Number((totalOvertimeMinutes / 60).toFixed(2));
+    const isCustom = w.wageType === 'CUSTOM';
+    const customRate = w.customWageRate || 0;
+    const dailyWage = isCustom ? 0 : (w.dailyWage || 0);
+
+    let customEarnings = 0;
+    if (isCustom && customRate > 0) {
+      customEarnings = w.attendanceRecords.reduce((sum: number, r: any) => {
+        const m = r.machinesOperated ?? (r.workingMinutes > 0 ? 1 : 0);
+        const h = r.hoursOperated ?? (r.workingMinutes / 60);
+        const otM = r.overtimeMachines ?? 0;
+        const otH = r.overtimeHours ?? (r.overtimeMinutes ? r.overtimeMinutes / 60 : 0);
+        const shiftPay = m * h * customRate;
+        const otPay = otM > 0 && otH > 0 ? otM * otH * customRate : otH * (customRate * (m || 1));
+        return sum + shiftPay + otPay;
+      }, 0);
+    }
+
+    const estimatedPayout = isCustom
+      ? Math.round(customEarnings)
+      : Math.round(daysPresent * dailyWage + (totalOvertimeHours * (dailyWage / 8)));
+
+    const operatedDays = w.attendanceRecords.filter((r: any) => (r.machinesOperated || 0) > 0);
+    const avgMachines = operatedDays.length > 0
+      ? Math.round(operatedDays.reduce((s: number, r: any) => s + (r.machinesOperated || 0), 0) / operatedDays.length)
+      : (isCustom ? 2 : (totalMachinesOperated > 0 ? totalMachinesOperated : 0));
 
     return {
       userId: w.id,
@@ -227,12 +263,19 @@ export async function getWeeklyAttendanceReport(refDateStr?: string, departmentI
       phone: w.phone,
       department: w.department?.name || 'Unassigned',
       shift: w.workerShifts[0]?.shift?.name || 'General Shift',
+      wageType: w.wageType || 'FIXED',
+      hasCustomWageAccess: Boolean(w.hasCustomWageAccess),
+      dailyWage: isCustom ? null : w.dailyWage,
+      customWageRate: isCustom ? w.customWageRate : null,
+      machinesOperated: avgMachines > 0 ? avgMachines : null,
+      totalMachinesLogged: totalMachinesOperated,
       daysPresent,
       daysLate,
       daysAbsent: 7 - daysPresent,
-      totalWorkingHours: Number((totalMinutes / 60).toFixed(2)),
-      totalOvertimeHours: Number((totalOvertimeMinutes / 60).toFixed(2)),
+      totalWorkingHours,
+      totalOvertimeHours,
       totalBreakMinutes,
+      estimatedPayout,
       dailyBreakdown,
     };
   });
@@ -242,6 +285,7 @@ export async function getWeeklyAttendanceReport(refDateStr?: string, departmentI
   const totalDaysPresentAll = workerSummaries.reduce((sum, w) => sum + w.daysPresent, 0);
   const totalHoursAll = workerSummaries.reduce((sum, w) => sum + w.totalWorkingHours, 0);
   const totalOvertimeAll = workerSummaries.reduce((sum, w) => sum + w.totalOvertimeHours, 0);
+  const totalPayoutAll = workerSummaries.reduce((sum, w) => sum + w.estimatedPayout, 0);
 
   return {
     period: {
@@ -255,6 +299,7 @@ export async function getWeeklyAttendanceReport(refDateStr?: string, departmentI
       totalWorkers: workers.length,
       totalHours: Number(totalHoursAll.toFixed(2)),
       totalOvertimeHours: Number(totalOvertimeAll.toFixed(2)),
+      totalPayout: totalPayoutAll,
       overallAttendanceRate: totalPossibleDays > 0 ? Math.round((totalDaysPresentAll / totalPossibleDays) * 100) : 0,
     },
     workers: workerSummaries,
@@ -430,6 +475,8 @@ export async function getYearlyAttendanceReport(yearRef?: number | string, depar
     let daysLate = 0;
     let totalOvertimeMinutes = 0;
     let totalBreakMinutes = 0;
+    let totalMachinesOperated = 0;
+    let totalCustomHoursOperated = 0;
 
     const monthlyCounts = Array.from({ length: 12 }, () => 0);
 
@@ -440,6 +487,8 @@ export async function getYearlyAttendanceReport(yearRef?: number | string, depar
         totalOvertimeMinutes += r.overtimeMinutes;
         totalBreakMinutes += r.breakMinutes;
         if (r.lateMinutes > 0) daysLate += 1;
+        if (r.machinesOperated) totalMachinesOperated += r.machinesOperated;
+        if (r.hoursOperated) totalCustomHoursOperated += r.hoursOperated;
 
         const m = parseInt(r.attendanceDate.split('-')[1], 10) - 1;
         if (m >= 0 && m < 12) {
@@ -459,12 +508,16 @@ export async function getYearlyAttendanceReport(yearRef?: number | string, depar
       customEarnings = w.attendanceRecords.reduce((sum: number, r: any) => {
         const m = r.machinesOperated ?? (r.workingMinutes > 0 ? 1 : 0);
         const h = r.hoursOperated ?? (r.workingMinutes / 60);
-        return sum + (m * h * customRate);
+        const otM = r.overtimeMachines ?? 0;
+        const otH = r.overtimeHours ?? (r.overtimeMinutes ? r.overtimeMinutes / 60 : 0);
+        const shiftPay = m * h * customRate;
+        const otPay = otM > 0 && otH > 0 ? otM * otH * customRate : otH * (customRate * (m || 1));
+        return sum + shiftPay + otPay;
       }, 0);
     }
     const estimatedPayout = isCustom
       ? Math.round(customEarnings)
-      : Math.round(daysPresent * dailyWage);
+      : Math.round(daysPresent * dailyWage + (totalOvertimeHours * (dailyWage / 8)));
 
     return {
       userId: w.id,
@@ -475,8 +528,10 @@ export async function getYearlyAttendanceReport(yearRef?: number | string, depar
       department: w.department?.name || 'Unassigned',
       shift: w.workerShifts[0]?.shift?.name || 'General Shift',
       wageType: w.wageType || 'FIXED',
+      hasCustomWageAccess: Boolean(w.hasCustomWageAccess),
       dailyWage: isCustom ? null : w.dailyWage,
       customWageRate: isCustom ? w.customWageRate : null,
+      machinesOperated: totalMachinesOperated > 0 ? totalMachinesOperated : null,
       daysPresent,
       daysLate,
       totalWorkingHours,

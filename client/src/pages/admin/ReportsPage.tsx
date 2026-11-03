@@ -29,6 +29,7 @@ export const ReportsPage: React.FC = () => {
   const { showToast } = useToast();
 
   const [reportType, setReportType] = useState<'WEEKLY' | 'MONTHLY' | 'YEARLY'>('WEEKLY');
+  const [viewMode, setViewMode] = useState<'SALARY' | 'DETAILED'>('SALARY');
   const [departments, setDepartments] = useState<Department[]>([]);
   const [selectedDept, setSelectedDept] = useState('');
   const [currentRefDate, setCurrentRefDate] = useState(() => {
@@ -101,7 +102,24 @@ export const ReportsPage: React.FC = () => {
     }
   };
 
-  // Download Excel Report (.xlsx)
+  // Download Salary Excel Report (Exactly 6 clean columns)
+  const handleDownloadSalaryExcel = async () => {
+    try {
+      setDownloadingExcel(true);
+      await reportsApi.downloadSalaryExcel(
+        currentRefDate,
+        reportType === 'WEEKLY' ? 'WEEKLY' : 'MONTHLY',
+        selectedDept || undefined
+      );
+      showToast('Salary Calculation Excel (.xlsx) downloaded successfully!', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to download Salary Excel report', 'error');
+    } finally {
+      setDownloadingExcel(false);
+    }
+  };
+
+  // Download Full Excel Report (.xlsx)
   const handleDownloadExcel = async () => {
     try {
       setDownloadingExcel(true);
@@ -144,29 +162,40 @@ export const ReportsPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-black text-navy-950 tracking-tight">
-            Attendance Reports & Excel Export
+            Attendance Reports &amp; Excel Salary Export
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Weekly, monthly and yearly worker attendance summaries, wage calculations & official Excel exports
+            Calculate worker salary in Excel with 6 focused columns: Worker ID, Name, Present/Absent, Machines, Days, Salary
           </p>
         </div>
 
-        <button
-          onClick={handleDownloadExcel}
-          disabled={downloadingExcel || loading}
-          className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-teal-700 to-emerald-700 hover:from-teal-800 hover:to-emerald-800 text-white rounded-xl text-xs sm:text-sm font-extrabold shadow-md shadow-teal-900/10 transition-all tap-active disabled:opacity-50"
-        >
-          {downloadingExcel ? (
-            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <>
-              <FileSpreadsheet className="w-4 h-4" />
-              <span>
-                Download {reportType === 'WEEKLY' ? 'Weekly' : reportType === 'MONTHLY' ? 'Monthly' : 'Yearly'} Excel (.xlsx)
-              </span>
-            </>
-          )}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleDownloadSalaryExcel}
+            disabled={downloadingExcel || loading}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl text-xs sm:text-sm font-black shadow-md shadow-emerald-900/10 transition-all tap-active disabled:opacity-50"
+            title="Download Excel with 6 core columns: Worker ID, Name, Present/Absent, Machines, Days, Salary"
+          >
+            {downloadingExcel ? (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <>
+                <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+                <span>Download Salary Excel (.xlsx)</span>
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={handleDownloadExcel}
+            disabled={downloadingExcel || loading}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs sm:text-sm font-bold border border-slate-700 shadow-xs transition-all tap-active disabled:opacity-50"
+            title="Download full multi-sheet report with daily logs"
+          >
+            <Download className="w-4 h-4 text-slate-300" />
+            <span>Full Report</span>
+          </button>
+        </div>
       </div>
 
       {/* PERIOD SELECTOR & TOOLBAR */}
@@ -303,109 +332,263 @@ export const ReportsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* DETAILED WORKER SUMMARY TABLE */}
+      {/* WORKER ATTENDANCE & SALARY TABLE */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+        <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/60">
           <div>
-            <h2 className="text-sm sm:text-base font-bold text-navy-950">
-              {reportType === 'WEEKLY'
-                ? 'Weekly Worker Attendance Summary'
-                : reportType === 'MONTHLY'
-                ? 'Monthly Attendance & Wage Statement'
-                : 'Annual Attendance & Payout Summary'}
+            <h2 className="text-sm sm:text-base font-bold text-navy-950 flex items-center gap-2">
+              {viewMode === 'SALARY' ? (
+                <>
+                  <IndianRupee className="w-4 h-4 text-emerald-600" />
+                  <span>Salary Calculation Statement</span>
+                </>
+              ) : (
+                <span>Detailed Attendance &amp; Log Breakdown</span>
+              )}
             </h2>
             <p className="text-xs text-slate-500">
               Company: Shree Swami Samarth Fabric • Reporting Period: {getDateDisplay()}
             </p>
           </div>
-          <span className="text-xs font-mono font-bold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200">
-            {workers.length} Workers
-          </span>
+
+          <div className="flex items-center gap-2">
+            {/* View Mode Toggle: Salary Calculation (6 Columns) vs Detailed */}
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setViewMode('SALARY')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  viewMode === 'SALARY'
+                    ? 'bg-navy-950 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-navy-950'
+                }`}
+              >
+                <IndianRupee className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Salary Calculation</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('DETAILED')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  viewMode === 'DETAILED'
+                    ? 'bg-navy-950 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-navy-950'
+                }`}
+              >
+                <span>Detailed Logs</span>
+              </button>
+            </div>
+
+            <span className="text-xs font-mono font-bold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200">
+              {workers.length} Workers
+            </span>
+          </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs sm:text-sm">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[11px]">
-                <th className="py-3 px-4">Worker ID</th>
-                <th className="py-3 px-4">Name</th>
-                <th className="py-3 px-4">Department</th>
-                <th className="py-3 px-4 text-right">Daily Wage</th>
-                {reportType === 'WEEKLY' && <th className="py-3 px-4">Shift</th>}
-                {reportType === 'MONTHLY' && <th className="py-3 px-4 text-center">Days in Month</th>}
-                <th className="py-3 px-4 text-center">Present</th>
-                <th className="py-3 px-4 text-center">Late</th>
-                {reportType !== 'YEARLY' && <th className="py-3 px-4 text-center">Absent</th>}
-                {reportType === 'WEEKLY' && <th className="py-3 px-4 text-right">Break Mins</th>}
-                <th className="py-3 px-4 text-right">Total Hours</th>
-                <th className="py-3 px-4 text-right">Overtime</th>
-                {reportType === 'WEEKLY' && <th className="py-3 px-4 text-center">Attendance %</th>}
-                {reportType !== 'WEEKLY' && <th className="py-3 px-4 text-right font-black text-navy-950">Est. Payout</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {workers.length === 0 ? (
-                <tr>
-                  <td colSpan={12} className="py-8 text-center text-slate-400">
-                    No worker records found for this {reportType.toLowerCase()} period.
-                  </td>
+        {viewMode === 'SALARY' ? (
+          /* EXACT 6 COLUMNS: Worker ID, Worker Name, Present or Absent, Machines Operated, How Many Days, Salary (₹) */
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs sm:text-sm">
+              <thead>
+                <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-600 font-black uppercase tracking-wider text-[11px]">
+                  <th className="py-3.5 px-4 text-center">Worker ID</th>
+                  <th className="py-3.5 px-4">Worker Name</th>
+                  <th className="py-3.5 px-4 text-center">Present or Absent</th>
+                  <th className="py-3.5 px-4 text-center">Machines Operated</th>
+                  <th className="py-3.5 px-4 text-center">How Many Days</th>
+                  <th className="py-3.5 px-4 text-right font-black text-navy-950">Salary (₹)</th>
                 </tr>
-              ) : (
-                workers.map((w: any) => {
-                  const pct = Math.round((w.daysPresent / 7) * 100);
-                  return (
-                    <tr key={w.userId} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="py-3 px-4 font-mono font-bold text-navy-950">{w.workerId}</td>
-                      <td className="py-3 px-4 font-semibold text-slate-800">{w.name}</td>
-                      <td className="py-3 px-4 text-slate-600">{w.department}</td>
-                      <td className="py-3 px-4 text-right font-mono text-slate-700">
-                        {w.dailyWage ? `₹${w.dailyWage}` : '--'}
-                      </td>
-                      {reportType === 'WEEKLY' && <td className="py-3 px-4 text-slate-500 text-xs">{w.shift}</td>}
-                      {reportType === 'MONTHLY' && (
-                        <td className="py-3 px-4 text-center font-mono text-slate-500">{w.daysInMonth}</td>
-                      )}
-                      <td className="py-3 px-4 text-center font-bold text-emerald-700">{w.daysPresent}</td>
-                      <td className="py-3 px-4 text-center font-bold text-amber-600">{w.daysLate}</td>
-                      {reportType !== 'YEARLY' && (
-                        <td className="py-3 px-4 text-center font-bold text-slate-400">{w.daysAbsent}</td>
-                      )}
-                      {reportType === 'WEEKLY' && (
-                        <td className="py-3 px-4 text-right font-mono text-slate-500">{w.totalBreakMinutes}m</td>
-                      )}
-                      <td className="py-3 px-4 text-right font-mono font-bold text-navy-950">
-                        {w.totalWorkingHours}h
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono text-teal-700">
-                        {w.totalOvertimeHours > 0 ? `${w.totalOvertimeHours}h` : '-'}
-                      </td>
-                      {reportType === 'WEEKLY' && (
-                        <td className="py-3 px-4 text-center">
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded font-bold text-[11px] ${
-                              pct >= 80
-                                ? 'bg-emerald-50 text-emerald-700'
-                                : pct >= 50
-                                ? 'bg-amber-50 text-amber-700'
-                                : 'bg-rose-50 text-rose-700'
-                            }`}
-                          >
-                            {pct}%
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {workers.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-slate-400">
+                      No worker records found for this period.
+                    </td>
+                  </tr>
+                ) : (
+                  workers.map((w: any) => {
+                    const isPresent = (w.daysPresent || 0) > 0;
+                    const machines = w.machinesOperated ?? (w.wageType === 'CUSTOM' ? 2 : null);
+
+                    return (
+                      <tr key={w.userId} className="hover:bg-slate-50/70 transition-colors">
+                        {/* 1. Worker ID */}
+                        <td className="py-3.5 px-4 text-center font-mono font-black text-navy-950">
+                          <span className="bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                            {w.workerId}
                           </span>
                         </td>
-                      )}
-                      {reportType !== 'WEEKLY' && (
-                        <td className="py-3 px-4 text-right font-mono font-bold text-emerald-800">
-                          {w.estimatedPayout > 0 ? `₹${w.estimatedPayout.toLocaleString('en-IN')}` : '--'}
+
+                        {/* 2. Worker Name */}
+                        <td className="py-3.5 px-4">
+                          <div className="font-bold text-slate-800">{w.name}</div>
+                          <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                            <span>{w.unit || 'Unit 1'}</span>
+                            <span>•</span>
+                            <span>{w.wageType === 'CUSTOM' ? 'Custom Rate' : 'Fixed Wage'}</span>
+                          </div>
                         </td>
-                      )}
-                    </tr>
-                  );
-                })
+
+                        {/* 3. Present or Absent */}
+                        <td className="py-3.5 px-4 text-center">
+                          {isPresent ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              Present ({w.daysPresent}d{w.daysAbsent > 0 ? ` / ${w.daysAbsent}d Abs` : ''})
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                              Absent
+                            </span>
+                          )}
+                        </td>
+
+                        {/* 4. Machines Operated */}
+                        <td className="py-3.5 px-4 text-center font-mono font-bold text-slate-700">
+                          {machines ? `${machines} Machines` : '--'}
+                        </td>
+
+                        {/* 5. How Many Days */}
+                        <td className="py-3.5 px-4 text-center font-mono font-bold text-navy-950">
+                          {w.daysPresent} Days
+                        </td>
+
+                        {/* 6. Salary (₹) */}
+                        <td className="py-3.5 px-4 text-right font-mono font-black text-emerald-700 text-sm sm:text-base">
+                          ₹{(w.estimatedPayout || 0).toLocaleString('en-IN')}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+              {workers.length > 0 && (
+                <tfoot className="bg-slate-100/90 border-t-2 border-slate-300 font-bold text-slate-700 text-xs sm:text-sm">
+                  <tr>
+                    <td colSpan={2} className="py-3 px-4 font-black text-navy-950">
+                      Total ({workers.length} Workers)
+                    </td>
+                    <td className="py-3 px-4 text-center text-xs">
+                      <span className="text-emerald-700 font-bold">
+                        {workers.filter((w: any) => (w.daysPresent || 0) > 0).length} Present
+                      </span>
+                      {' • '}
+                      <span className="text-rose-600 font-bold">
+                        {workers.filter((w: any) => (w.daysPresent || 0) === 0).length} Absent
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-center font-mono font-bold text-slate-800">
+                      {workers.reduce(
+                        (sum: number, w: any) =>
+                          sum + (w.machinesOperated ?? (w.wageType === 'CUSTOM' ? 2 : 0)),
+                        0
+                      )}{' '}
+                      Machines
+                    </td>
+                    <td className="py-3 px-4 text-center font-mono font-bold text-slate-900">
+                      {workers.reduce((sum: number, w: any) => sum + (w.daysPresent || 0), 0)} Days
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-black text-emerald-800 text-sm sm:text-base">
+                      ₹
+                      {workers
+                        .reduce((sum: number, w: any) => sum + (w.estimatedPayout || 0), 0)
+                        .toLocaleString('en-IN')}
+                    </td>
+                  </tr>
+                </tfoot>
               )}
-            </tbody>
-          </table>
-        </div>
+            </table>
+          </div>
+        ) : (
+          /* DETAILED BREAKDOWN VIEW */
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs sm:text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[11px]">
+                  <th className="py-3 px-4">Worker ID</th>
+                  <th className="py-3 px-4">Name</th>
+                  <th className="py-3 px-4">Department</th>
+                  <th className="py-3 px-4 text-right">Daily Wage</th>
+                  {reportType === 'WEEKLY' && <th className="py-3 px-4">Shift</th>}
+                  {reportType === 'MONTHLY' && <th className="py-3 px-4 text-center">Days in Month</th>}
+                  <th className="py-3 px-4 text-center">Present</th>
+                  <th className="py-3 px-4 text-center">Late</th>
+                  {reportType !== 'YEARLY' && <th className="py-3 px-4 text-center">Absent</th>}
+                  {reportType === 'WEEKLY' && <th className="py-3 px-4 text-right">Break Mins</th>}
+                  <th className="py-3 px-4 text-right">Total Hours</th>
+                  <th className="py-3 px-4 text-right">Overtime</th>
+                  {reportType === 'WEEKLY' && <th className="py-3 px-4 text-center">Attendance %</th>}
+                  {reportType !== 'WEEKLY' && (
+                    <th className="py-3 px-4 text-right font-black text-navy-950">Est. Payout</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {workers.length === 0 ? (
+                  <tr>
+                    <td colSpan={12} className="py-8 text-center text-slate-400">
+                      No worker records found for this {reportType.toLowerCase()} period.
+                    </td>
+                  </tr>
+                ) : (
+                  workers.map((w: any) => {
+                    const pct = Math.round((w.daysPresent / 7) * 100);
+                    return (
+                      <tr key={w.userId} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-3 px-4 font-mono font-bold text-navy-950">{w.workerId}</td>
+                        <td className="py-3 px-4 font-semibold text-slate-800">{w.name}</td>
+                        <td className="py-3 px-4 text-slate-600">{w.department}</td>
+                        <td className="py-3 px-4 text-right font-mono text-slate-700">
+                          {w.dailyWage ? `₹${w.dailyWage}` : '--'}
+                        </td>
+                        {reportType === 'WEEKLY' && <td className="py-3 px-4 text-slate-500 text-xs">{w.shift}</td>}
+                        {reportType === 'MONTHLY' && (
+                          <td className="py-3 px-4 text-center font-mono text-slate-500">{w.daysInMonth}</td>
+                        )}
+                        <td className="py-3 px-4 text-center font-bold text-emerald-700">{w.daysPresent}</td>
+                        <td className="py-3 px-4 text-center font-bold text-amber-600">{w.daysLate}</td>
+                        {reportType !== 'YEARLY' && (
+                          <td className="py-3 px-4 text-center font-bold text-slate-400">{w.daysAbsent}</td>
+                        )}
+                        {reportType === 'WEEKLY' && (
+                          <td className="py-3 px-4 text-right font-mono text-slate-500">{w.totalBreakMinutes}m</td>
+                        )}
+                        <td className="py-3 px-4 text-right font-mono font-bold text-navy-950">
+                          {w.totalWorkingHours}h
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-teal-700">
+                          {w.totalOvertimeHours > 0 ? `${w.totalOvertimeHours}h` : '-'}
+                        </td>
+                        {reportType === 'WEEKLY' && (
+                          <td className="py-3 px-4 text-center">
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded font-bold text-[11px] ${
+                                pct >= 80
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : pct >= 50
+                                  ? 'bg-amber-50 text-amber-700'
+                                  : 'bg-rose-50 text-rose-700'
+                              }`}
+                            >
+                              {pct}%
+                            </span>
+                          </td>
+                        )}
+                        {reportType !== 'WEEKLY' && (
+                          <td className="py-3 px-4 text-right font-mono font-bold text-emerald-800">
+                            {w.estimatedPayout > 0 ? `₹${w.estimatedPayout.toLocaleString('en-IN')}` : '--'}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
