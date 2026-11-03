@@ -1,0 +1,9 @@
+{
+  "appId": "com.shreeswamisamarthfabric.app",
+  "appName": "Shree Swami Samarth Fabric",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  }
+}

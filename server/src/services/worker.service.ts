@@ -66,7 +66,9 @@ export async function listWorkers(params: {
     name: u.name,
     phone: u.phone,
     role: u.role,
+    wageType: u.wageType || 'FIXED',
     dailyWage: u.dailyWage,
+    hasCustomWageAccess: Boolean(u.hasCustomWageAccess),
     isActive: u.isActive,
     department: u.department ? { id: u.department.id, name: u.department.name } : null,
     shift: u.workerShifts[0]?.shift ? {
@@ -113,7 +115,9 @@ export async function getWorkerById(id: string) {
     name: user.name,
     phone: user.phone,
     role: user.role,
+    wageType: user.wageType || 'FIXED',
     dailyWage: user.dailyWage,
+    hasCustomWageAccess: Boolean(user.hasCustomWageAccess),
     isActive: user.isActive,
     department: user.department,
     shift: user.workerShifts[0]?.shift || null,
@@ -131,7 +135,9 @@ export async function createWorker(
     role?: RoleType;
     departmentId?: string;
     shiftId?: string;
-    dailyWage?: number;
+    wageType?: 'FIXED' | 'CUSTOM';
+    dailyWage?: number | null;
+    hasCustomWageAccess?: boolean;
     joiningDate?: string;
   },
   adminActor: { id: string; name: string }
@@ -147,6 +153,10 @@ export async function createWorker(
   }
 
   const passwordHash = await bcrypt.hash(data.passwordOrPin, 10);
+  const isCustom = data.wageType === 'CUSTOM';
+  const hasCustomWageAccess = isCustom
+    ? (data.hasCustomWageAccess !== undefined ? Boolean(data.hasCustomWageAccess) : true)
+    : Boolean(data.hasCustomWageAccess);
 
   const newUser = await prisma.user.create({
     data: {
@@ -155,7 +165,9 @@ export async function createWorker(
       phone: data.phone?.trim() || null,
       passwordHash,
       role: data.role || Roles.WORKER,
-      dailyWage: data.dailyWage !== undefined && data.dailyWage !== null ? Number(data.dailyWage) : null,
+      wageType: isCustom ? 'CUSTOM' : 'FIXED',
+      dailyWage: isCustom ? null : (data.dailyWage !== undefined && data.dailyWage !== null ? Number(data.dailyWage) : null),
+      hasCustomWageAccess,
       departmentId: data.departmentId || null,
       joiningDate: data.joiningDate ? new Date(data.joiningDate) : new Date(),
     },
@@ -194,7 +206,9 @@ export async function updateWorker(
     phone?: string;
     departmentId?: string | null;
     shiftId?: string;
+    wageType?: 'FIXED' | 'CUSTOM';
     dailyWage?: number | null;
+    hasCustomWageAccess?: boolean;
     isActive?: boolean;
     joiningDate?: string;
   },
@@ -204,13 +218,25 @@ export async function updateWorker(
   const existing = await prisma.user.findUnique({ where: { id } });
   if (!existing) throw new Error('Worker not found');
 
+  const willBeCustom = data.wageType !== undefined ? data.wageType === 'CUSTOM' : existing.wageType === 'CUSTOM';
+
   const updated = await prisma.user.update({
     where: { id },
     data: {
       ...(data.name ? { name: data.name.trim() } : {}),
       ...(data.phone !== undefined ? { phone: data.phone ? data.phone.trim() : null } : {}),
       ...(data.departmentId !== undefined ? { departmentId: data.departmentId } : {}),
-      ...(data.dailyWage !== undefined ? { dailyWage: data.dailyWage !== null ? Number(data.dailyWage) : null } : {}),
+      ...(data.wageType !== undefined ? { wageType: data.wageType } : {}),
+      ...(data.hasCustomWageAccess !== undefined
+        ? { hasCustomWageAccess: Boolean(data.hasCustomWageAccess) }
+        : data.wageType === 'CUSTOM'
+        ? { hasCustomWageAccess: true }
+        : {}),
+      ...(data.wageType === 'CUSTOM'
+        ? { dailyWage: null }
+        : data.dailyWage !== undefined
+        ? { dailyWage: data.dailyWage !== null ? Number(data.dailyWage) : null }
+        : {}),
       ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
       ...(data.joiningDate ? { joiningDate: new Date(data.joiningDate) } : {}),
     },

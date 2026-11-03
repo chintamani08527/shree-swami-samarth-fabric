@@ -164,7 +164,11 @@ export async function processCheckIn(
 export async function processCheckOut(
   userId: string,
   source: AttendanceSourceType = AttendanceSources.WEB_MOBILE,
-  adminActor?: { id: string; name: string }
+  adminActor?: { id: string; name: string },
+  customDetails?: {
+    machinesOperated?: number | null;
+    hoursOperated?: number | null;
+  }
 ) {
   const serverNow = new Date(); // Server-authoritative timestamp
   const attendanceDate = getKolkataDateString(serverNow);
@@ -240,6 +244,12 @@ export async function processCheckOut(
       lateMinutes: calc.lateMinutes,
       status: calc.status,
       isMissingCheckOut: false,
+      ...(customDetails?.machinesOperated !== undefined && customDetails.machinesOperated !== null
+        ? { machinesOperated: Number(customDetails.machinesOperated) }
+        : {}),
+      ...(customDetails?.hoursOperated !== undefined && customDetails.hoursOperated !== null
+        ? { hoursOperated: Number(customDetails.hoursOperated) }
+        : {}),
     },
   });
 
@@ -251,7 +261,13 @@ export async function processCheckOut(
       entityType: 'ATTENDANCE',
       entityId: updatedRecord.id,
       reason: 'Admin marked check-out on behalf of worker',
-      details: { workerId: user.workerId, checkOutAt: serverNow, workingMinutes: calc.workingMinutes },
+      details: {
+        workerId: user.workerId,
+        checkOutAt: serverNow,
+        workingMinutes: calc.workingMinutes,
+        machinesOperated: updatedRecord.machinesOperated,
+        hoursOperated: updatedRecord.hoursOperated,
+      },
     });
   }
 
@@ -260,8 +276,69 @@ export async function processCheckOut(
     workingHours: calc.workingHours,
     breakMinutes: calc.breakMinutes,
     overtimeMinutes: calc.overtimeMinutes,
+    machinesOperated: updatedRecord.machinesOperated,
+    hoursOperated: updatedRecord.hoursOperated,
     message: `Thank you, ${user.name}! Check-out recorded at ${formatKolkataTime(serverNow)}. Total working hours: ${calc.workingHours} hrs.`,
   };
+}
+
+/**
+ * Worker logs or updates custom wage details (how many machines and how many hours operated)
+ */
+export async function logCustomWageWork(
+  userId: string,
+  data: {
+    machinesOperated?: number | null;
+    hoursOperated?: number | null;
+    remarks?: string;
+  }
+) {
+  const serverNow = new Date();
+  const attendanceDate = getKolkataDateString(serverNow);
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || !user.isActive) {
+    throw new Error('Worker profile not found or inactive.');
+  }
+
+  if (!user.hasCustomWageAccess && user.wageType !== 'CUSTOM') {
+    throw new Error('Custom wage access has not been granted for this account. Please contact Factory Admin to enable custom wages.');
+  }
+
+  let record = await prisma.attendanceRecord.findUnique({
+    where: {
+      userId_attendanceDate: {
+        userId,
+        attendanceDate,
+      },
+    },
+  });
+
+  if (!record) {
+    record = await prisma.attendanceRecord.create({
+      data: {
+        userId,
+        workerId: user.workerId,
+        attendanceDate,
+        status: AttendanceStatuses.PRESENT,
+        source: AttendanceSources.WEB_MOBILE,
+        machinesOperated: data.machinesOperated !== undefined && data.machinesOperated !== null ? Number(data.machinesOperated) : null,
+        hoursOperated: data.hoursOperated !== undefined && data.hoursOperated !== null ? Number(data.hoursOperated) : null,
+        remarks: data.remarks || null,
+      },
+    });
+  } else {
+    record = await prisma.attendanceRecord.update({
+      where: { id: record.id },
+      data: {
+        ...(data.machinesOperated !== undefined ? { machinesOperated: data.machinesOperated !== null ? Number(data.machinesOperated) : null } : {}),
+        ...(data.hoursOperated !== undefined ? { hoursOperated: data.hoursOperated !== null ? Number(data.hoursOperated) : null } : {}),
+        ...(data.remarks !== undefined ? { remarks: data.remarks } : {}),
+      },
+    });
+  }
+
+  return record;
 }
 
 /**
@@ -413,6 +490,12 @@ export async function getWorkerStatus(userId: string) {
       workingHours: Number((liveDurationMinutes / 60).toFixed(2)),
       breakMinutes: todayRecord?.breakMinutes || 0,
       lateMinutes: todayRecord?.lateMinutes || 0,
+      machinesOperated: todayRecord?.machinesOperated ?? null,
+      hoursOperated: todayRecord?.hoursOperated ?? null,
+    },
+    worker: {
+      wageType: user.wageType || 'FIXED',
+      hasCustomWageAccess: Boolean(user.hasCustomWageAccess || user.wageType === 'CUSTOM'),
     },
     shift: shift ? {
       name: shift.name,
@@ -472,6 +555,8 @@ export async function getWorkerAttendanceHistory(
     breakMinutes: r.breakMinutes,
     status: r.status,
     lateMinutes: r.lateMinutes,
+    machinesOperated: r.machinesOperated ?? null,
+    hoursOperated: r.hoursOperated ?? null,
     isMissingCheckOut: r.isMissingCheckOut,
     remarks: r.remarks,
   }));
@@ -539,6 +624,8 @@ export async function listAttendanceRecords(params: {
             name: true,
             workerId: true,
             phone: true,
+            wageType: true,
+            hasCustomWageAccess: true,
             department: { select: { id: true, name: true } },
           },
         },
@@ -557,6 +644,8 @@ export async function listAttendanceRecords(params: {
     phone: r.user.phone,
     department: r.user.department?.name || 'Unassigned',
     departmentId: r.user.department?.id || null,
+    wageType: r.user.wageType || 'FIXED',
+    hasCustomWageAccess: Boolean(r.user.hasCustomWageAccess),
     attendanceDate: r.attendanceDate,
     formattedDate: formatKolkataDate(r.attendanceDate),
     dayOfWeek: getDayOfWeekName(r.attendanceDate),
@@ -569,6 +658,8 @@ export async function listAttendanceRecords(params: {
     breakMinutes: r.breakMinutes,
     overtimeMinutes: r.overtimeMinutes,
     lateMinutes: r.lateMinutes,
+    machinesOperated: r.machinesOperated ?? null,
+    hoursOperated: r.hoursOperated ?? null,
     status: r.status,
     source: r.source,
     isMissingCheckOut: r.isMissingCheckOut,
@@ -593,6 +684,8 @@ export async function correctAttendanceRecord(
     checkInAt?: string | null;
     checkOutAt?: string | null;
     status?: AttendanceStatusType;
+    machinesOperated?: number | null;
+    hoursOperated?: number | null;
     remarks?: string;
   },
   adminUser: { id: string; name: string },
@@ -669,6 +762,8 @@ export async function correctAttendanceRecord(
       status: calc.status,
       source: AttendanceSources.MANUAL_CORRECTION,
       isMissingCheckOut: calc.isMissingCheckOut,
+      ...(updateData.machinesOperated !== undefined ? { machinesOperated: updateData.machinesOperated !== null ? Number(updateData.machinesOperated) : null } : {}),
+      ...(updateData.hoursOperated !== undefined ? { hoursOperated: updateData.hoursOperated !== null ? Number(updateData.hoursOperated) : null } : {}),
       remarks: updateData.remarks || existing.remarks,
     },
   });

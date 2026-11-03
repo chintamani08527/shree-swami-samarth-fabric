@@ -22,6 +22,8 @@ export interface User {
   phone?: string | null;
   role: RoleType;
   dailyWage?: number | null;
+  wageType?: 'FIXED' | 'CUSTOM';
+  hasCustomWageAccess?: boolean;
   isActive: boolean;
   department?: { id: string; name: string } | null;
   departmentId?: string | null;
@@ -81,6 +83,10 @@ export interface AttendanceRecord {
   source: AttendanceSourceType;
   isMissingCheckOut: boolean;
   remarks?: string | null;
+  wageType?: 'FIXED' | 'CUSTOM';
+  hasCustomWageAccess?: boolean;
+  machinesOperated?: number | null;
+  hoursOperated?: number | null;
 }
 
 export interface WorkerTodayStatus {
@@ -99,6 +105,13 @@ export interface WorkerTodayStatus {
     workingHours: number;
     breakMinutes: number;
     lateMinutes: number;
+    machinesOperated?: number | null;
+    hoursOperated?: number | null;
+  };
+  worker?: {
+    wageType: 'FIXED' | 'CUSTOM';
+    hasCustomWageAccess: boolean;
+    dailyWage?: number | null;
   };
   shift?: {
     name: string;

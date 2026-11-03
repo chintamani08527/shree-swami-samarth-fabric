@@ -27,7 +27,9 @@ const createWorkerSchema = z.object({
     role: z.enum([Roles.ADMIN, Roles.SUPERVISOR, Roles.WORKER]).optional(),
     departmentId: z.string().optional(),
     shiftId: z.string().optional(),
+    wageType: z.enum(['FIXED', 'CUSTOM']).optional(),
     dailyWage: z.number().nullable().optional(),
+    hasCustomWageAccess: z.boolean().optional(),
     joiningDate: z.string().optional(),
   }),
 });

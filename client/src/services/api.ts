@@ -72,10 +72,23 @@ export const attendanceApi = {
       body: JSON.stringify(workerUserId ? { workerUserId } : {}),
     }),
 
-  checkOut: (workerUserId?: string) =>
-    request<{ success: boolean; message: string; data: any; workingHours: number }>('/attendance/check-out', {
+  checkOut: (options?: { workerUserId?: string; machinesOperated?: number; hoursOperated?: number } | string) => {
+    let payload: Record<string, any> = {};
+    if (typeof options === 'string') {
+      payload.workerUserId = options;
+    } else if (options) {
+      payload = { ...options };
+    }
+    return request<{ success: boolean; message: string; data: any; workingHours: number }>('/attendance/check-out', {
       method: 'POST',
-      body: JSON.stringify(workerUserId ? { workerUserId } : {}),
+      body: JSON.stringify(payload),
+    });
+  },
+
+  logCustomWageWork: (data: { machinesOperated?: number; hoursOperated?: number; remarks?: string }) =>
+    request<{ success: boolean; message: string; data: any }>('/attendance/custom-wage-log', {
+      method: 'POST',
+      body: JSON.stringify(data),
     }),
 
   getMyStatus: () =>

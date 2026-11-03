@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   processCheckIn,
   processCheckOut,
+  logCustomWageWork,
   getWorkerStatus,
   getWorkerAttendanceHistory,
   listAttendanceRecords,
@@ -63,7 +64,12 @@ router.post('/check-out', async (req: Request, res: Response) => {
       adminActor = { id: req.user!.id, name: req.user!.name };
     }
 
-    const result = await processCheckOut(targetUserId, source, adminActor);
+    const customDetails = {
+      machinesOperated: req.body.machinesOperated !== undefined && req.body.machinesOperated !== null ? Number(req.body.machinesOperated) : undefined,
+      hoursOperated: req.body.hoursOperated !== undefined && req.body.hoursOperated !== null ? Number(req.body.hoursOperated) : undefined,
+    };
+
+    const result = await processCheckOut(targetUserId, source, adminActor, customDetails);
 
     res.json({
       success: true,
@@ -72,11 +78,36 @@ router.post('/check-out', async (req: Request, res: Response) => {
       workingHours: result.workingHours,
       breakMinutes: result.breakMinutes,
       overtimeMinutes: result.overtimeMinutes,
+      machinesOperated: result.machinesOperated,
+      hoursOperated: result.hoursOperated,
     });
   } catch (error: any) {
     res.status(400).json({
       success: false,
       message: error.message || 'Check-out failed.',
+    });
+  }
+});
+
+// 2b. Worker: Log or update custom wage work details (machines & hours operated)
+router.post('/custom-wage-log', async (req: Request, res: Response) => {
+  try {
+    const { machinesOperated, hoursOperated, remarks } = req.body;
+    const record = await logCustomWageWork(req.user!.id, {
+      machinesOperated: machinesOperated !== undefined && machinesOperated !== null ? Number(machinesOperated) : null,
+      hoursOperated: hoursOperated !== undefined && hoursOperated !== null ? Number(hoursOperated) : null,
+      remarks,
+    });
+
+    res.json({
+      success: true,
+      message: 'Custom wage details (machines & hours) recorded successfully.',
+      data: record,
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      message: error.message || 'Failed to log custom wage details.',
     });
   }
 });
@@ -174,6 +205,8 @@ const correctionSchema = z.object({
     checkInAt: z.string().nullable().optional(),
     checkOutAt: z.string().nullable().optional(),
     status: z.enum(['PRESENT', 'LATE', 'HALF_DAY', 'ABSENT', 'ON_LEAVE', 'HOLIDAY']).optional(),
+    machinesOperated: z.number().nullable().optional(),
+    hoursOperated: z.number().nullable().optional(),
     remarks: z.string().optional(),
   }),
 });

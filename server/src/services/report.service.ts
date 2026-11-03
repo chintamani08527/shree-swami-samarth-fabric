@@ -286,11 +286,14 @@ export async function getMonthlyAttendanceReport(refDateStr?: string, department
   });
 
   const workerSummaries = workers.map((w) => {
-    let totalMinutes = 0;
+    let totalWorkingHoursAll = 0;
     let daysPresent = 0;
     let daysLate = 0;
     let totalOvertimeMinutes = 0;
     let totalBreakMinutes = 0;
+    let totalMinutes = 0;
+    let totalMachinesOperated = 0;
+    let totalCustomHoursOperated = 0;
 
     w.attendanceRecords.forEach((r) => {
       if (r.checkInAt) {
@@ -299,13 +302,16 @@ export async function getMonthlyAttendanceReport(refDateStr?: string, department
         totalOvertimeMinutes += r.overtimeMinutes;
         totalBreakMinutes += r.breakMinutes;
         if (r.lateMinutes > 0) daysLate += 1;
+        if (r.machinesOperated) totalMachinesOperated += r.machinesOperated;
+        if (r.hoursOperated) totalCustomHoursOperated += r.hoursOperated;
       }
     });
 
     const totalWorkingHours = Number((totalMinutes / 60).toFixed(2));
     const totalOvertimeHours = Number((totalOvertimeMinutes / 60).toFixed(2));
-    const dailyWage = w.dailyWage || 0;
-    const estimatedPayout = Math.round(daysPresent * dailyWage);
+    const isCustom = w.wageType === 'CUSTOM';
+    const dailyWage = isCustom ? 0 : (w.dailyWage || 0);
+    const estimatedPayout = isCustom ? 0 : Math.round(daysPresent * dailyWage);
 
     return {
       userId: w.id,
@@ -314,7 +320,11 @@ export async function getMonthlyAttendanceReport(refDateStr?: string, department
       phone: w.phone,
       department: w.department?.name || 'Unassigned',
       shift: w.workerShifts[0]?.shift?.name || 'General Shift',
-      dailyWage: w.dailyWage,
+      wageType: w.wageType || 'FIXED',
+      hasCustomWageAccess: Boolean(w.hasCustomWageAccess),
+      dailyWage: isCustom ? null : w.dailyWage,
+      machinesOperated: totalMachinesOperated > 0 ? totalMachinesOperated : null,
+      hoursOperated: totalCustomHoursOperated > 0 ? Number(totalCustomHoursOperated.toFixed(1)) : null,
       daysInMonth: month.totalDays,
       daysPresent,
       daysLate,

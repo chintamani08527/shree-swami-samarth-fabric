@@ -46,6 +46,8 @@ export const AttendanceMonitoring: React.FC = () => {
   const [selectedRecord, setSelectedRecord] = useState<AttendanceRecord | null>(null);
   const [correctionCheckIn, setCorrectionCheckIn] = useState('');
   const [correctionCheckOut, setCorrectionCheckOut] = useState('');
+  const [correctionMachinesOperated, setCorrectionMachinesOperated] = useState('');
+  const [correctionHoursOperated, setCorrectionHoursOperated] = useState('');
   const [correctionStatus, setCorrectionStatus] = useState<string>('PRESENT');
   const [correctionReason, setCorrectionReason] = useState('');
   const [correctionRemarks, setCorrectionRemarks] = useState('');
@@ -105,6 +107,12 @@ export const AttendanceMonitoring: React.FC = () => {
     setCorrectionCheckOut(
       record.checkOutAt ? new Date(record.checkOutAt).toISOString().slice(0, 16) : ''
     );
+    setCorrectionMachinesOperated(
+      record.machinesOperated != null ? String(record.machinesOperated) : ''
+    );
+    setCorrectionHoursOperated(
+      record.hoursOperated != null ? String(record.hoursOperated) : ''
+    );
     setCorrectionStatus(record.status);
     setCorrectionReason('');
     setCorrectionRemarks(record.remarks || '');
@@ -128,6 +136,8 @@ export const AttendanceMonitoring: React.FC = () => {
         checkInAt: correctionCheckIn ? new Date(correctionCheckIn).toISOString() : null,
         checkOutAt: correctionCheckOut ? new Date(correctionCheckOut).toISOString() : null,
         status: correctionStatus,
+        machinesOperated: correctionMachinesOperated ? parseInt(correctionMachinesOperated, 10) : null,
+        hoursOperated: correctionHoursOperated ? parseFloat(correctionHoursOperated) : null,
         remarks: correctionRemarks.trim() || undefined,
       });
 
@@ -352,6 +362,7 @@ export const AttendanceMonitoring: React.FC = () => {
                   <th className="py-3 px-4">Check-Out</th>
                   <th className="py-3 px-4 text-right">Break</th>
                   <th className="py-3 px-4 text-right">Work Hours</th>
+                  <th className="py-3 px-4 text-center">Custom Work</th>
                   <th className="py-3 px-4 text-center">Status</th>
                   <th className="py-3 px-4 text-center">Indicator</th>
                   {isAdmin && <th className="py-3 px-4 text-center">Action</th>}
@@ -360,7 +371,7 @@ export const AttendanceMonitoring: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {records.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="py-8 text-center text-slate-400">
+                    <td colSpan={12} className="py-8 text-center text-slate-400">
                       No attendance records found matching filters.
                     </td>
                   </tr>
@@ -384,6 +395,15 @@ export const AttendanceMonitoring: React.FC = () => {
                       <td className="py-3 px-4 text-right font-mono text-slate-500">{r.breakMinutes}m</td>
                       <td className="py-3 px-4 text-right font-mono font-bold text-navy-950">
                         {r.workingHours}h
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        {r.machinesOperated != null || r.hoursOperated != null ? (
+                          <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-900 border border-amber-200 text-[10px] font-mono font-bold px-2 py-0.5 rounded-md whitespace-nowrap">
+                            ⚙️ {r.machinesOperated ?? '--'} mc / {r.hoursOperated ?? '--'}h
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-xs font-mono">--</span>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-center">
                         <StatusBadge status={r.status} size="sm" />
@@ -473,6 +493,32 @@ export const AttendanceMonitoring: React.FC = () => {
               <option value="ON_LEAVE">ON_LEAVE</option>
               <option value="HOLIDAY">HOLIDAY</option>
             </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 p-3 bg-amber-50/50 rounded-xl border border-amber-200/60">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Machines Operated (Custom)</label>
+              <input
+                type="number"
+                min="0"
+                placeholder="e.g. 4"
+                value={correctionMachinesOperated}
+                onChange={(e) => setCorrectionMachinesOperated(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono focus:ring-2 focus:ring-teal-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Hours Operated (Custom)</label>
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                placeholder="e.g. 8.5"
+                value={correctionHoursOperated}
+                onChange={(e) => setCorrectionHoursOperated(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono focus:ring-2 focus:ring-teal-500"
+              />
+            </div>
           </div>
 
           <div>

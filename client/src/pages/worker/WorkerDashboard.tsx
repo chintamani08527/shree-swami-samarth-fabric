@@ -12,10 +12,14 @@ import {
   ChevronRight,
   ShieldCheck,
   RefreshCw,
+  Cpu,
+  Layers,
+  Edit3,
 } from 'lucide-react';
 import { Logo } from '../../components/common/Logo.tsx';
 import { LiveClock } from '../../components/common/LiveClock.tsx';
 import { StatusBadge } from '../../components/common/StatusBadge.tsx';
+import { Modal } from '../../components/common/Modal.tsx';
 import { WorkerBottomNav } from '../../components/layout/WorkerBottomNav.tsx';
 import { useAuth } from '../../context/AuthContext.tsx';
 import { useToast } from '../../context/ToastContext.tsx';
@@ -33,6 +37,20 @@ export const WorkerDashboard: React.FC = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [activeTimerSeconds, setActiveTimerSeconds] = useState<number>(0);
 
+  // Custom wage & machine logging state
+  const [customWageModalOpen, setCustomWageModalOpen] = useState(false);
+  const [checkOutPromptOpen, setCheckOutPromptOpen] = useState(false);
+  const [machinesOperated, setMachinesOperated] = useState<string>('');
+  const [hoursOperated, setHoursOperated] = useState<string>('');
+  const [customWorkRemarks, setCustomWorkRemarks] = useState<string>('');
+  const [savingCustomWork, setSavingCustomWork] = useState(false);
+
+  // Check if worker has custom wage access granted by admin
+  const hasCustomWageAccess = Boolean(
+    statusData?.worker?.hasCustomWageAccess ??
+    (user?.hasCustomWageAccess || user?.wageType === 'CUSTOM' || statusData?.worker?.wageType === 'CUSTOM')
+  );
+
   // Load worker today status and attendance history
   const loadData = async () => {
     try {
@@ -44,6 +62,12 @@ export const WorkerDashboard: React.FC = () => {
 
       if (statusRes.success) {
         setStatusData(statusRes.data);
+        if (statusRes.data.today.machinesOperated != null) {
+          setMachinesOperated(String(statusRes.data.today.machinesOperated));
+        }
+        if (statusRes.data.today.hoursOperated != null) {
+          setHoursOperated(String(statusRes.data.today.hoursOperated));
+        }
       }
       if (historyRes.success) {
         setHistoryRecords(historyRes.data);
@@ -111,8 +135,22 @@ export const WorkerDashboard: React.FC = () => {
     }
   };
 
-  // Check Out handler
-  const handleCheckOut = async () => {
+  // Check Out initiator
+  const handleInitiateCheckOut = () => {
+    if (hasCustomWageAccess) {
+      // Pre-fill hours operated with live duration if not filled
+      if (!hoursOperated && activeTimerSeconds > 0) {
+        const liveHrs = (activeTimerSeconds / 3600).toFixed(1);
+        setHoursOperated(liveHrs);
+      }
+      setCheckOutPromptOpen(true);
+    } else {
+      handleDirectCheckOut();
+    }
+  };
+
+  // Direct Check Out handler (fixed wage or supervisor)
+  const handleDirectCheckOut = async () => {
     try {
       setActionLoading(true);
       const res = await attendanceApi.checkOut();
@@ -124,6 +162,49 @@ export const WorkerDashboard: React.FC = () => {
       showToast(err.message || 'Check-out failed.', 'error');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  // Check Out with Custom Wage Machines & Hours
+  const handleConfirmCheckOutWithCustomDetails = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setActionLoading(true);
+      const res = await attendanceApi.checkOut({
+        machinesOperated: machinesOperated ? parseInt(machinesOperated, 10) : undefined,
+        hoursOperated: hoursOperated ? parseFloat(hoursOperated) : undefined,
+      });
+      if (res.success) {
+        showToast(res.message, 'success');
+        setCheckOutPromptOpen(false);
+        await loadData();
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Check-out failed.', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Save or Update Custom Work without checking out
+  const handleSaveCustomWork = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setSavingCustomWork(true);
+      const res = await attendanceApi.logCustomWageWork({
+        machinesOperated: machinesOperated ? parseInt(machinesOperated, 10) : undefined,
+        hoursOperated: hoursOperated ? parseFloat(hoursOperated) : undefined,
+        remarks: customWorkRemarks.trim() || undefined,
+      });
+      if (res.success) {
+        showToast(res.message || 'Custom work details updated successfully', 'success');
+        setCustomWageModalOpen(false);
+        await loadData();
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update work details', 'error');
+    } finally {
+      setSavingCustomWork(false);
     }
   };
 
@@ -378,7 +459,7 @@ export const WorkerDashboard: React.FC = () => {
                   </button>
                 ) : !isCheckedOut ? (
                   <button
-                    onClick={handleCheckOut}
+                    onClick={handleInitiateCheckOut}
                     disabled={actionLoading}
                     className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-extrabold text-lg sm:text-xl shadow-lg shadow-amber-600/30 flex items-center justify-center gap-3 transition-all tap-active disabled:opacity-50"
                   >
@@ -399,6 +480,82 @@ export const WorkerDashboard: React.FC = () => {
                 )}
               </div>
             </div>
+
+            {/* Custom Wage Worker Section: Machine & Operating Hours */}
+            {hasCustomWageAccess && (
+              <div className="bg-white rounded-2xl p-5 shadow-sm border border-amber-200/80 bg-gradient-to-br from-white to-amber-50/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center">
+                      <Cpu className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-bold text-navy-950 flex items-center gap-1.5">
+                        <span>Custom Wage Work Log</span>
+                        <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold uppercase">
+                          Access Granted
+                        </span>
+                      </h2>
+                      <p className="text-xs text-slate-500">How many machines &amp; hours you operated</p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setCustomWageModalOpen(true)}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all tap-active shadow-sm"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>{statusData?.today.machinesOperated != null ? 'Update' : 'Log Work'}</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-amber-50/70 border border-amber-200/60 rounded-xl">
+                    <span className="text-[11px] font-bold text-amber-800 block uppercase tracking-wider">
+                      Machines Operated
+                    </span>
+                    <div className="text-xl sm:text-2xl font-black text-amber-950 mt-1 font-mono">
+                      {statusData?.today.machinesOperated != null ? (
+                        <span>
+                          {statusData.today.machinesOperated}{' '}
+                          <span className="text-xs font-normal text-amber-700">Machines</span>
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-sm italic font-sans">Not logged</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-amber-50/70 border border-amber-200/60 rounded-xl">
+                    <span className="text-[11px] font-bold text-amber-800 block uppercase tracking-wider">
+                      Hours Operated
+                    </span>
+                    <div className="text-xl sm:text-2xl font-black text-amber-950 mt-1 font-mono">
+                      {statusData?.today.hoursOperated != null ? (
+                        <span>
+                          {statusData.today.hoursOperated}{' '}
+                          <span className="text-xs font-normal text-amber-700">Hours</span>
+                        </span>
+                      ) : isCheckedIn && !isCheckedOut ? (
+                        <span>
+                          {(activeTimerSeconds / 3600).toFixed(1)}{' '}
+                          <span className="text-xs font-normal text-teal-700">Live hrs</span>
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-sm italic font-sans">Not logged</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-amber-100/60 rounded-xl p-2.5 text-[11px] text-amber-900 leading-snug flex items-center gap-2">
+                  <span className="text-base">💡</span>
+                  <span>
+                    Your daily wage is determined by machines operated and total hours. You can update this log anytime or during check-out.
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Weekly Summary Card */}
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
@@ -493,6 +650,14 @@ export const WorkerDashboard: React.FC = () => {
                           </>
                         )}
                       </div>
+                      {(r.machinesOperated != null || r.hoursOperated != null) && (
+                        <div className="mt-1.5 inline-flex items-center gap-1.5 bg-amber-50 text-amber-900 border border-amber-200/70 text-[11px] font-semibold px-2 py-0.5 rounded-md">
+                          <Cpu className="w-3 h-3 text-amber-600" />
+                          <span>{r.machinesOperated ?? '--'} Machines</span>
+                          <span>•</span>
+                          <span>{r.hoursOperated ?? '--'} hrs operated</span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex flex-col items-end gap-1">
@@ -524,6 +689,32 @@ export const WorkerDashboard: React.FC = () => {
               <div className="p-3 bg-slate-50 rounded-xl flex justify-between items-center">
                 <span className="text-slate-500 font-medium">Worker ID</span>
                 <span className="font-mono font-bold text-navy-950">{user?.workerId}</span>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl flex justify-between items-center">
+                <span className="text-slate-500 font-medium">Wage Model</span>
+                <span className="font-bold text-navy-950">
+                  {hasCustomWageAccess ? (
+                    <span className="text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded text-xs font-semibold">
+                      Custom (Machines &amp; Hours Operated)
+                    </span>
+                  ) : (
+                    <span>Fixed Daily Wage {user?.dailyWage ? `(₹${user.dailyWage}/day)` : ''}</span>
+                  )}
+                </span>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl flex justify-between items-center">
+                <span className="text-slate-500 font-medium">Custom Wage Access</span>
+                <span className="font-bold">
+                  {hasCustomWageAccess ? (
+                    <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-xs">
+                      Granted by Admin
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 text-xs">Disabled</span>
+                  )}
+                </span>
               </div>
 
               <div className="p-3 bg-slate-50 rounded-xl flex justify-between items-center">
@@ -561,6 +752,150 @@ export const WorkerDashboard: React.FC = () => {
           </div>
         )}
       </main>
+
+      {/* UPDATE CUSTOM WORK MODAL */}
+      <Modal
+        isOpen={customWageModalOpen}
+        onClose={() => setCustomWageModalOpen(false)}
+        title="Custom Wage Work Details"
+        subtitle="Log how many machines and hours you operated today"
+        maxWidth="md"
+      >
+        <form onSubmit={handleSaveCustomWork} className="space-y-4">
+          <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
+            <Cpu className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+            <span>
+              Admin has given you access for custom wage entry. Enter the exact count of machines and hours worked.
+            </span>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              How Many Machines Operated? *
+            </label>
+            <input
+              type="number"
+              min="0"
+              required
+              placeholder="e.g. 4 (Number of looms / machines)"
+              value={machinesOperated}
+              onChange={(e) => setMachinesOperated(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-amber-500"
+            />
+            <span className="text-[10px] text-slate-400">Total number of textile machines operated by you.</span>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              How Many Hours Operated? *
+            </label>
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              required
+              placeholder="e.g. 8.5"
+              value={hoursOperated}
+              onChange={(e) => setHoursOperated(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-amber-500"
+            />
+            <span className="text-[10px] text-slate-400">Operating time spent on the machines.</span>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Remarks / Loom Numbers (Optional)</label>
+            <input
+              type="text"
+              placeholder="e.g. Looms #1, #2, #5, #6"
+              value={customWorkRemarks}
+              onChange={(e) => setCustomWorkRemarks(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-amber-500"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setCustomWageModalOpen(false)}
+              className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={savingCustomWork}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
+            >
+              {savingCustomWork ? 'Saving...' : 'Save Work Details'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* CHECK OUT CONFIRMATION MODAL WITH CUSTOM DETAILS */}
+      <Modal
+        isOpen={checkOutPromptOpen}
+        onClose={() => setCheckOutPromptOpen(false)}
+        title="Shift Check-Out & Work Log"
+        subtitle="Confirm your operated machines and hours before completing shift"
+        maxWidth="md"
+      >
+        <form onSubmit={handleConfirmCheckOutWithCustomDetails} className="space-y-4">
+          <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900">
+            Please verify your machine count and hours operated so your wage payout is calculated accurately.
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              How Many Machines Operated? *
+            </label>
+            <input
+              type="number"
+              min="0"
+              required
+              placeholder="e.g. 4"
+              value={machinesOperated}
+              onChange={(e) => setMachinesOperated(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-amber-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              How Many Hours Operated? *
+            </label>
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              required
+              placeholder="e.g. 8.5"
+              value={hoursOperated}
+              onChange={(e) => setHoursOperated(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-amber-500"
+            />
+            <span className="text-[10px] text-slate-400">Pre-calculated from your shift timer. Adjust if needed.</span>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setCheckOutPromptOpen(false)}
+              className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={actionLoading}
+              className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white rounded-xl text-xs font-bold shadow-md transition-colors disabled:opacity-50 flex items-center gap-1.5"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>{actionLoading ? 'Recording Check-Out...' : 'Confirm & Check Out'}</span>
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Worker Mobile Bottom Navigation */}
       <WorkerBottomNav currentTab={currentTab} onSelectTab={(tab: any) => setCurrentTab(tab)} />
