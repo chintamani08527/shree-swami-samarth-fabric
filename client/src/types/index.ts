@@ -25,6 +25,7 @@ export interface User {
   customWageRate?: number | null;
   wageType?: 'FIXED' | 'CUSTOM';
   hasCustomWageAccess?: boolean;
+  unit?: 'Unit 1' | 'Unit 2' | string;
   isActive: boolean;
   department?: { id: string; name: string } | null;
   departmentId?: string | null;
@@ -87,8 +88,11 @@ export interface AttendanceRecord {
   wageType?: 'FIXED' | 'CUSTOM';
   hasCustomWageAccess?: boolean;
   shiftType?: 'DAY' | 'NIGHT' | string | null;
+  unit?: string;
   machinesOperated?: number | null;
   hoursOperated?: number | null;
+  overtimeMachines?: number | null;
+  overtimeHours?: number | null;
 }
 
 export interface WorkerTodayStatus {
@@ -110,12 +114,15 @@ export interface WorkerTodayStatus {
     lateMinutes: number;
     machinesOperated?: number | null;
     hoursOperated?: number | null;
+    overtimeMachines?: number | null;
+    overtimeHours?: number | null;
   };
   worker?: {
     wageType: 'FIXED' | 'CUSTOM';
     hasCustomWageAccess: boolean;
     dailyWage?: number | null;
     customWageRate?: number | null;
+    unit?: string;
   };
   shift?: {
     name: string;

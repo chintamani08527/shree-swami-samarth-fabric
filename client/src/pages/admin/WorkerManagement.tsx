@@ -72,6 +72,8 @@ const SalaryProjectionCard: React.FC<{
               <option value="3">3 Machines</option>
               <option value="4">4 Machines</option>
               <option value="6">6 Machines</option>
+              <option value="8">8 Machines</option>
+              <option value="12">12 Machines</option>
             </select>
           </div>
           <div className="flex items-center gap-1">
@@ -81,6 +83,7 @@ const SalaryProjectionCard: React.FC<{
               onChange={(e) => setSimHours(Number(e.target.value))}
               className="bg-slate-950 text-white border border-slate-600 rounded px-1.5 py-0.5 text-xs font-bold font-mono focus:ring-1 focus:ring-amber-500"
             >
+              <option value="4">4 hrs (Half)</option>
               <option value="8">8 hrs (Normal)</option>
               <option value="10">10 hrs</option>
               <option value="12">12 hrs (Full)</option>
@@ -95,7 +98,7 @@ const SalaryProjectionCard: React.FC<{
           <div className="text-sm font-extrabold font-mono text-emerald-400 mt-0.5">
             ₹{weekSalary.toLocaleString('en-IN')}
           </div>
-          <div className="text-[9px] text-slate-400">₹{Math.round(daySalary).toLocaleString('en-IN')}/day</div>
+          <div className="text-[9px] text-slate-400 font-mono">₹{Number(daySalary.toFixed(2)).toLocaleString('en-IN')}/day</div>
         </div>
 
         <div className="bg-slate-800/70 p-2 rounded-lg border border-slate-700/60 ring-1 ring-amber-500/30">
@@ -131,6 +134,7 @@ export const WorkerManagement: React.FC = () => {
   // Filters
   const [search, setSearch] = useState('');
   const [selectedDept, setSelectedDept] = useState('');
+  const [selectedUnit, setSelectedUnit] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
 
   // Add Worker Modal State
@@ -141,6 +145,7 @@ export const WorkerManagement: React.FC = () => {
   const [newRole, setNewRole] = useState<'WORKER' | 'SUPERVISOR' | 'ADMIN'>('WORKER');
   const [newDeptId, setNewDeptId] = useState('');
   const [newShiftId, setNewShiftId] = useState('');
+  const [newUnit, setNewUnit] = useState<'Unit 1' | 'Unit 2'>('Unit 1');
   const [newWageType, setNewWageType] = useState<'FIXED' | 'CUSTOM'>('FIXED');
   const [newHasCustomAccess, setNewHasCustomAccess] = useState<boolean>(true);
   const [newDailyWage, setNewDailyWage] = useState<string>('');
@@ -155,6 +160,7 @@ export const WorkerManagement: React.FC = () => {
   const [editPhone, setEditPhone] = useState('');
   const [editDeptId, setEditDeptId] = useState('');
   const [editShiftId, setEditShiftId] = useState('');
+  const [editUnit, setEditUnit] = useState<'Unit 1' | 'Unit 2'>('Unit 1');
   const [editWageType, setEditWageType] = useState<'FIXED' | 'CUSTOM'>('FIXED');
   const [editHasCustomAccess, setEditHasCustomAccess] = useState<boolean>(false);
   const [editDailyWage, setEditDailyWage] = useState<string>('');
@@ -193,6 +199,7 @@ export const WorkerManagement: React.FC = () => {
         search: search || undefined,
         departmentId: selectedDept || undefined,
         isActive: selectedStatus !== '' ? selectedStatus === 'active' : undefined,
+        unit: selectedUnit || undefined,
         limit: 100,
       });
       if (res.success) {
@@ -207,7 +214,7 @@ export const WorkerManagement: React.FC = () => {
 
   useEffect(() => {
     loadWorkers();
-  }, [selectedDept, selectedStatus]);
+  }, [selectedDept, selectedStatus, selectedUnit]);
 
   // Handle Add Worker Submit
   const handleAddWorker = async (e: React.FormEvent) => {
@@ -220,6 +227,7 @@ export const WorkerManagement: React.FC = () => {
         phone: newPhone.trim() || undefined,
         role: newRole,
         departmentId: newDeptId || undefined,
+        unit: newUnit,
         wageType: newWageType,
         hasCustomWageAccess: newWageType === 'CUSTOM' ? newHasCustomAccess : false,
         dailyWage: newWageType === 'FIXED' && newDailyWage ? parseFloat(newDailyWage) : undefined,
@@ -234,6 +242,7 @@ export const WorkerManagement: React.FC = () => {
         setNewWorkerId('');
         setNewName('');
         setNewPhone('');
+        setNewUnit('Unit 1');
         setNewWageType('FIXED');
         setNewHasCustomAccess(true);
         setNewDailyWage('');
@@ -255,6 +264,7 @@ export const WorkerManagement: React.FC = () => {
     setEditPhone(worker.phone || '');
     setEditDeptId(worker.department?.id || '');
     setEditShiftId(worker.shift?.id || '');
+    setEditUnit((worker.unit as any) === 'Unit 2' ? 'Unit 2' : 'Unit 1');
     setEditWageType(worker.wageType === 'CUSTOM' ? 'CUSTOM' : 'FIXED');
     setEditHasCustomAccess(Boolean(worker.hasCustomWageAccess));
     setEditDailyWage(worker.dailyWage ? String(worker.dailyWage) : '');
@@ -273,6 +283,7 @@ export const WorkerManagement: React.FC = () => {
         name: editName.trim(),
         phone: editPhone.trim() || null,
         departmentId: editDeptId || null,
+        unit: editUnit,
         wageType: editWageType,
         hasCustomWageAccess: editWageType === 'CUSTOM' ? editHasCustomAccess : false,
         dailyWage: editWageType === 'FIXED' && editDailyWage ? parseFloat(editDailyWage) : null,
@@ -396,6 +407,16 @@ export const WorkerManagement: React.FC = () => {
         </select>
 
         <select
+          value={selectedUnit}
+          onChange={(e) => setSelectedUnit(e.target.value)}
+          className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+        >
+          <option value="">All Units (1 & 2)</option>
+          <option value="Unit 1">🏭 Unit 1</option>
+          <option value="Unit 2">🏭 Unit 2</option>
+        </select>
+
+        <select
           value={selectedStatus}
           onChange={(e) => setSelectedStatus(e.target.value)}
           className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
@@ -422,6 +443,7 @@ export const WorkerManagement: React.FC = () => {
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[11px]">
                 <th className="py-3 px-4">Worker ID</th>
                 <th className="py-3 px-4">Name</th>
+                <th className="py-3 px-4">Unit</th>
                 <th className="py-3 px-4">Phone</th>
                 <th className="py-3 px-4">Department</th>
                 <th className="py-3 px-4 text-right">Wage Plan</th>
@@ -434,7 +456,7 @@ export const WorkerManagement: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {workers.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-8 text-center text-slate-400">
+                  <td colSpan={10} className="py-8 text-center text-slate-400">
                     No workers registered yet. Click &quot;Register New Worker&quot; to add your staff.
                   </td>
                 </tr>
@@ -444,6 +466,15 @@ export const WorkerManagement: React.FC = () => {
                     <td className="py-3 px-4 font-mono font-bold text-navy-950">{w.workerId}</td>
                     <td className="py-3 px-4">
                       <div className="font-bold text-slate-900">{w.name}</div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md border ${
+                        w.unit === 'Unit 2'
+                          ? 'bg-blue-50 text-blue-800 border-blue-200'
+                          : 'bg-purple-50 text-purple-800 border-purple-200'
+                      }`}>
+                        🏭 {w.unit || 'Unit 1'}
+                      </span>
                     </td>
                     <td className="py-3 px-4 text-slate-600 font-mono text-xs">{w.phone || '--'}</td>
                     <td className="py-3 px-4 text-slate-700 font-medium">{w.department?.name || 'Unassigned'}</td>
@@ -579,6 +610,40 @@ export const WorkerManagement: React.FC = () => {
             />
           </div>
 
+          {/* Manufacturing Unit Selection (Unit 1 or Unit 2) */}
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-800">Factory Manufacturing Unit *</label>
+              <span className="text-[10px] text-slate-400">Select plant unit</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setNewUnit('Unit 1')}
+                className={`py-2 px-3 rounded-lg text-xs font-bold border transition-all text-center flex items-center justify-center gap-1.5 ${
+                  newUnit === 'Unit 1'
+                    ? 'bg-navy-950 text-white border-navy-950 shadow-xs ring-2 ring-navy-900/20'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <span>🏭</span>
+                <span>Unit 1</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setNewUnit('Unit 2')}
+                className={`py-2 px-3 rounded-lg text-xs font-bold border transition-all text-center flex items-center justify-center gap-1.5 ${
+                  newUnit === 'Unit 2'
+                    ? 'bg-navy-950 text-white border-navy-950 shadow-xs ring-2 ring-navy-900/20'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <span>🏭</span>
+                <span>Unit 2</span>
+              </button>
+            </div>
+          </div>
+
           {/* Wage Type Selection */}
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
             <div className="flex items-center justify-between">
@@ -622,7 +687,7 @@ export const WorkerManagement: React.FC = () => {
                   <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">₹</span>
                   <input
                     type="number"
-                    step="1"
+                    step="any"
                     placeholder="Enter Fixed Daily Wage (e.g. 500)"
                     value={newDailyWage}
                     onChange={(e) => setNewDailyWage(e.target.value)}
@@ -644,10 +709,10 @@ export const WorkerManagement: React.FC = () => {
                     <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">₹</span>
                     <input
                       type="number"
-                      step="0.5"
+                      step="any"
                       min="0"
                       required
-                      placeholder="Enter wage for 1 machine 1 hour (e.g. 50)"
+                      placeholder="e.g. 29.166667 (Wage for 1 machine 1 hour)"
                       value={newCustomWageRate}
                       onChange={(e) => setNewCustomWageRate(e.target.value)}
                       className="w-full pl-7 pr-3 py-2 border border-slate-200 rounded-xl text-xs font-mono focus:ring-2 focus:ring-amber-500"
@@ -781,6 +846,40 @@ export const WorkerManagement: React.FC = () => {
             />
           </div>
 
+          {/* Manufacturing Unit Selection (Unit 1 or Unit 2) */}
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-800">Factory Manufacturing Unit *</label>
+              <span className="text-[10px] text-slate-400">Select plant unit</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setEditUnit('Unit 1')}
+                className={`py-2 px-3 rounded-lg text-xs font-bold border transition-all text-center flex items-center justify-center gap-1.5 ${
+                  editUnit === 'Unit 1'
+                    ? 'bg-navy-950 text-white border-navy-950 shadow-xs ring-2 ring-navy-900/20'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <span>🏭</span>
+                <span>Unit 1</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditUnit('Unit 2')}
+                className={`py-2 px-3 rounded-lg text-xs font-bold border transition-all text-center flex items-center justify-center gap-1.5 ${
+                  editUnit === 'Unit 2'
+                    ? 'bg-navy-950 text-white border-navy-950 shadow-xs ring-2 ring-navy-900/20'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <span>🏭</span>
+                <span>Unit 2</span>
+              </button>
+            </div>
+          </div>
+
           {/* Wage Type Selection */}
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
             <div className="flex items-center justify-between">
@@ -824,7 +923,7 @@ export const WorkerManagement: React.FC = () => {
                   <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">₹</span>
                   <input
                     type="number"
-                    step="1"
+                    step="any"
                     placeholder="Enter Fixed Daily Wage"
                     value={editDailyWage}
                     onChange={(e) => setEditDailyWage(e.target.value)}
@@ -843,10 +942,10 @@ export const WorkerManagement: React.FC = () => {
                     <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">₹</span>
                     <input
                       type="number"
-                      step="0.5"
+                      step="any"
                       min="0"
                       required
-                      placeholder="Enter wage for 1 machine 1 hour (e.g. 50)"
+                      placeholder="e.g. 29.166667 (Wage for 1 machine 1 hour)"
                       value={editCustomWageRate}
                       onChange={(e) => setEditCustomWageRate(e.target.value)}
                       className="w-full pl-7 pr-3 py-2 border border-slate-200 rounded-xl text-xs font-mono focus:ring-2 focus:ring-amber-500"

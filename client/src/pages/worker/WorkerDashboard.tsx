@@ -15,6 +15,9 @@ import {
   Cpu,
   Layers,
   Edit3,
+  User as UserIcon,
+  Sparkles,
+  Zap,
 } from 'lucide-react';
 import { Logo } from '../../components/common/Logo.tsx';
 import { LiveClock } from '../../components/common/LiveClock.tsx';
@@ -30,7 +33,7 @@ export const WorkerDashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const { showToast } = useToast();
 
-  const [currentTab, setCurrentTab] = useState<'home' | 'history' | 'profile'>('home');
+  const [currentTab, setCurrentTab] = useState<'home' | 'overtime' | 'history' | 'profile'>('home');
   const [statusData, setStatusData] = useState<WorkerTodayStatus | null>(null);
   const [historyRecords, setHistoryRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,6 +48,13 @@ export const WorkerDashboard: React.FC = () => {
   const [hoursOperated, setHoursOperated] = useState<string>('');
   const [customWorkRemarks, setCustomWorkRemarks] = useState<string>('');
   const [savingCustomWork, setSavingCustomWork] = useState(false);
+
+  // Overtime Portal dedicated state
+  const [overtimeMachines, setOvertimeMachines] = useState<string>('');
+  const [overtimeHours, setOvertimeHours] = useState<string>('');
+  const [overtimeRemarks, setOvertimeRemarks] = useState<string>('');
+  const [savingOvertime, setSavingOvertime] = useState(false);
+  const [overtimeSavedMessage, setOvertimeSavedMessage] = useState<string>('');
 
   // Day Shift vs Night Shift selection (asked directly to worker)
   const currentHour = new Date().getHours();
@@ -76,6 +86,12 @@ export const WorkerDashboard: React.FC = () => {
         }
         if (statusRes.data.today.hoursOperated != null) {
           setHoursOperated(String(statusRes.data.today.hoursOperated));
+        }
+        if (statusRes.data.today.overtimeMachines != null) {
+          setOvertimeMachines(String(statusRes.data.today.overtimeMachines));
+        }
+        if (statusRes.data.today.overtimeHours != null) {
+          setOvertimeHours(String(statusRes.data.today.overtimeHours));
         }
       }
       if (historyRes.success) {
@@ -178,10 +194,13 @@ export const WorkerDashboard: React.FC = () => {
     e.preventDefault();
     try {
       setActionLoading(true);
-      const isLoggingWork = hasOvertime || hasCustomWageAccess;
+      const isLoggingWork = hasCustomWageAccess || Boolean(machinesOperated);
+      const isLoggingOT = hasOvertime || Boolean(overtimeMachines) || Boolean(overtimeHours);
       const res = await attendanceApi.checkOut({
         machinesOperated: isLoggingWork && machinesOperated ? parseInt(machinesOperated, 10) : undefined,
         hoursOperated: isLoggingWork && hoursOperated ? parseFloat(hoursOperated) : undefined,
+        overtimeMachines: isLoggingOT && overtimeMachines ? parseInt(overtimeMachines, 10) : undefined,
+        overtimeHours: isLoggingOT && overtimeHours ? parseFloat(overtimeHours) : undefined,
       });
       if (res.success) {
         showToast(res.message, 'success');
@@ -192,6 +211,29 @@ export const WorkerDashboard: React.FC = () => {
       showToast(err.message || 'Check-out failed.', 'error');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  // Save or Update Overtime Work via Overtime Portal
+  const handleSaveOvertimeWork = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setSavingOvertime(true);
+      const res = await attendanceApi.logOvertimeWork({
+        overtimeMachines: overtimeMachines ? parseInt(overtimeMachines, 10) : undefined,
+        overtimeHours: overtimeHours ? parseFloat(overtimeHours) : undefined,
+        remarks: overtimeRemarks.trim() || undefined,
+      });
+      if (res.success) {
+        showToast(res.message || 'Overtime details recorded successfully in Overtime Portal', 'success');
+        setOvertimeSavedMessage('Overtime details saved successfully!');
+        setTimeout(() => setOvertimeSavedMessage(''), 3500);
+        await loadData();
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Failed to record overtime details', 'error');
+    } finally {
+      setSavingOvertime(false);
     }
   };
 
@@ -277,6 +319,10 @@ export const WorkerDashboard: React.FC = () => {
               ID: {user?.workerId}
             </span>
             <span>•</span>
+            <span className="bg-teal-900/60 text-teal-300 border border-teal-700/60 px-2 py-0.5 rounded-md font-bold">
+              🏭 {statusData?.worker?.unit || user?.unit || 'Unit 1'}
+            </span>
+            <span>•</span>
             <span>Dept: {user?.department?.name || 'Textile Floor'}</span>
             <span>•</span>
             <span>
@@ -296,6 +342,54 @@ export const WorkerDashboard: React.FC = () => {
             <div className="text-xs text-slate-300 font-medium">Factory Local Time:</div>
             <LiveClock showDate={false} />
           </div>
+        </div>
+
+        {/* Navigation Tabs Bar */}
+        <div className="bg-white rounded-2xl p-1.5 shadow-sm border border-slate-200/90 grid grid-cols-4 gap-1 text-xs font-bold">
+          <button
+            onClick={() => setCurrentTab('home')}
+            className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1.5 transition-all ${
+              currentTab === 'home'
+                ? 'bg-navy-950 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5" />
+            <span>Shift</span>
+          </button>
+          <button
+            onClick={() => setCurrentTab('overtime')}
+            className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1.5 transition-all ${
+              currentTab === 'overtime'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Timer className="w-3.5 h-3.5" />
+            <span>Overtime</span>
+          </button>
+          <button
+            onClick={() => setCurrentTab('history')}
+            className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1.5 transition-all ${
+              currentTab === 'history'
+                ? 'bg-teal-700 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <CalendarCheck className="w-3.5 h-3.5" />
+            <span>History</span>
+          </button>
+          <button
+            onClick={() => setCurrentTab('profile')}
+            className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1.5 transition-all ${
+              currentTab === 'profile'
+                ? 'bg-navy-950 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <UserIcon className="w-3.5 h-3.5" />
+            <span>Profile</span>
+          </button>
         </div>
 
         {/* TAB 1: HOME (ATTENDANCE ACTIONS) */}
@@ -561,6 +655,79 @@ export const WorkerDashboard: React.FC = () => {
               </div>
             )}
 
+            {/* Overtime Portal Quick Card */}
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-orange-200/90 bg-gradient-to-br from-white to-orange-50/40 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-800 flex items-center justify-center">
+                    <Timer className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-navy-950 flex items-center gap-1.5">
+                      <span>Overtime Portal</span>
+                      <span className="text-[10px] bg-orange-100 text-orange-800 px-1.5 py-0.5 rounded font-bold uppercase">
+                        OT Hub
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-500">Log extra machines &amp; overtime hours</p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setCurrentTab('overtime')}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-bold transition-all tap-active shadow-sm"
+                >
+                  <span>Open Portal</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-orange-50/70 border border-orange-200/60 rounded-xl">
+                  <span className="text-[11px] font-bold text-orange-800 block uppercase tracking-wider">
+                    Overtime Machines
+                  </span>
+                  <div className="text-xl sm:text-2xl font-black text-orange-950 mt-1 font-mono">
+                    {statusData?.today.overtimeMachines != null ? (
+                      <span>
+                        {statusData.today.overtimeMachines}{' '}
+                        <span className="text-xs font-normal text-orange-700">Machines</span>
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 text-sm italic font-sans">0 Machines</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-3 bg-orange-50/70 border border-orange-200/60 rounded-xl">
+                  <span className="text-[11px] font-bold text-orange-800 block uppercase tracking-wider">
+                    Overtime Hours
+                  </span>
+                  <div className="text-xl sm:text-2xl font-black text-orange-950 mt-1 font-mono">
+                    {statusData?.today.overtimeHours != null ? (
+                      <span>
+                        {statusData.today.overtimeHours}{' '}
+                        <span className="text-xs font-normal text-orange-700">Hours</span>
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 text-sm italic font-sans">0 Hours</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {statusData?.worker?.customWageRate && statusData.today.overtimeMachines && statusData.today.overtimeHours ? (
+                <div className="p-2.5 bg-slate-900 text-white rounded-xl flex items-center justify-between text-xs">
+                  <span className="text-slate-300">
+                    Estimated OT Wage (@ ₹{statusData.worker.customWageRate}/mc/hr):
+                  </span>
+                  <strong className="text-amber-400 font-mono text-sm font-black">
+                    ₹{Math.round(statusData.today.overtimeMachines * statusData.today.overtimeHours * statusData.worker.customWageRate).toLocaleString('en-IN')}
+                  </strong>
+                </div>
+              ) : null}
+            </div>
+
             {/* Weekly Summary Card */}
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
               <h3 className="text-sm font-bold text-navy-950 mb-3 flex items-center gap-2">
@@ -607,6 +774,224 @@ export const WorkerDashboard: React.FC = () => {
               <p>• Grace period is 15 minutes from scheduled shift start time.</p>
               <p>• Standard 60-minute break is automatically accounted for shifts over 5 hours.</p>
               <p>• Only factory server timestamps are recorded for anti-tamper security.</p>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: DEDICATED OVERTIME PORTAL */}
+        {currentTab === 'overtime' && (
+          <div className="space-y-4">
+            {/* Overtime Portal Header Banner */}
+            <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white rounded-2xl p-5 shadow-lg relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-amber-100 uppercase tracking-wider">
+                  <Timer className="w-4 h-4" />
+                  <span>Factory Overtime Portal</span>
+                </div>
+                <span className="text-[11px] font-bold bg-white/20 backdrop-blur-sm px-2.5 py-0.5 rounded-full border border-white/30">
+                  🏭 {statusData?.worker?.unit || user?.unit || 'Unit 1'}
+                </span>
+              </div>
+
+              <h2 className="text-xl sm:text-2xl font-black tracking-tight">
+                Overtime Duty &amp; Operations
+              </h2>
+              <p className="text-xs text-amber-100 mt-1">
+                Record your extra loom machines and overtime operating hours accurately.
+              </p>
+
+              {/* Status Pills */}
+              <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-white/20 text-xs">
+                <span className="bg-black/25 px-2.5 py-1 rounded-lg font-mono">
+                  Worker ID: {user?.workerId}
+                </span>
+                <span className="bg-black/25 px-2.5 py-1 rounded-lg">
+                  {statusData?.today.shiftType === 'NIGHT' ? '🌙 Night Shift' : '☀️ Day Shift'}
+                </span>
+                {statusData?.worker?.customWageRate ? (
+                  <span className="bg-white/25 px-2.5 py-1 rounded-lg font-mono font-bold">
+                    Rate: ₹{statusData.worker.customWageRate}/mc/hr
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Overtime Today Summary Card */}
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-navy-950">Today's Recorded Overtime</h3>
+                  <p className="text-xs text-slate-500">{statusData?.today.formattedDate || 'Today'}</p>
+                </div>
+                {statusData?.today.overtimeHours ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    OT Recorded
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
+                    Not Recorded Yet
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3.5 bg-orange-50 rounded-xl border border-orange-200/80">
+                  <span className="text-[11px] font-bold text-orange-800 uppercase tracking-wide block">
+                    OT Machines Operated
+                  </span>
+                  <div className="text-2xl font-black text-orange-950 mt-1 font-mono">
+                    {statusData?.today.overtimeMachines ?? (overtimeMachines || 0)}{' '}
+                    <span className="text-xs font-normal text-orange-700">Looms</span>
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-orange-50 rounded-xl border border-orange-200/80">
+                  <span className="text-[11px] font-bold text-orange-800 uppercase tracking-wide block">
+                    OT Hours Worked
+                  </span>
+                  <div className="text-2xl font-black text-orange-950 mt-1 font-mono">
+                    {statusData?.today.overtimeHours ?? (overtimeHours || 0)}{' '}
+                    <span className="text-xs font-normal text-orange-700">Hours</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Calculated Overtime Payout Card */}
+              {statusData?.worker?.customWageRate && (overtimeMachines || statusData?.today.overtimeMachines) && (overtimeHours || statusData?.today.overtimeHours) ? (
+                <div className="p-3.5 bg-slate-900 text-white rounded-xl space-y-1">
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span>Overtime Formula:</span>
+                    <span className="font-mono text-amber-300">
+                      {(overtimeMachines || statusData.today.overtimeMachines)} mc × {(overtimeHours || statusData.today.overtimeHours)} hrs × ₹{statusData.worker.customWageRate}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-800">
+                    <span className="text-xs font-bold text-slate-200">Total Projected OT Earnings:</span>
+                    <strong className="text-base sm:text-lg font-black text-amber-400 font-mono">
+                      ₹{Math.round(
+                        Number(overtimeMachines || statusData.today.overtimeMachines) *
+                        Number(overtimeHours || statusData.today.overtimeHours) *
+                        statusData.worker.customWageRate
+                      ).toLocaleString('en-IN')}
+                    </strong>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Overtime Entry Form Card */}
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-orange-200 space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-700 flex items-center justify-center">
+                  <Cpu className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-navy-950">Log or Update Overtime Work</h3>
+                  <p className="text-xs text-slate-500">Enter overtime machines &amp; hours for today</p>
+                </div>
+              </div>
+
+              {overtimeSavedMessage && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{overtimeSavedMessage}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveOvertimeWork} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Overtime Machines Operated *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    required
+                    placeholder="e.g. 2 or 4 (Count of looms operated in OT)"
+                    value={overtimeMachines}
+                    onChange={(e) => setOvertimeMachines(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-orange-500"
+                  />
+                  <span className="text-[10px] text-slate-500">
+                    Number of textile machines operated specifically during overtime hours.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Overtime Hours Worked *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    required
+                    placeholder="e.g. 2, 3.5, 4 (Duration in hours)"
+                    value={overtimeHours}
+                    onChange={(e) => setOvertimeHours(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-orange-500"
+                  />
+                  <span className="text-[10px] text-slate-500">
+                    Overtime duration worked beyond standard shift duty.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Remarks / Loom Numbers / Supervisor (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Looms #5, #6; approved by floor supervisor"
+                    value={overtimeRemarks}
+                    onChange={(e) => setOvertimeRemarks(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+
+                {/* Live Real-time Wage Calculation Box */}
+                {statusData?.worker?.customWageRate && overtimeMachines && overtimeHours && Number(overtimeMachines) > 0 && Number(overtimeHours) > 0 && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-950 flex items-center justify-between">
+                    <div>
+                      <span className="font-bold block">Live OT Wage Preview:</span>
+                      <span className="text-[11px] text-amber-800">
+                        {overtimeMachines} mc × {overtimeHours} hrs @ ₹{statusData.worker.customWageRate}
+                      </span>
+                    </div>
+                    <strong className="text-base font-black font-mono text-amber-900">
+                      ₹{Math.round(Number(overtimeMachines) * Number(overtimeHours) * statusData.worker.customWageRate).toLocaleString('en-IN')}
+                    </strong>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={savingOvertime}
+                  className="w-full py-3.5 px-4 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-extrabold text-sm rounded-xl shadow-md transition-all tap-active disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {savingOvertime ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Timer className="w-4 h-4" />
+                      <span>Save Overtime Details</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+
+            {/* Overtime Guidelines Card */}
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 text-xs text-slate-600 space-y-2">
+              <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-orange-600" />
+                <span>Factory Overtime Guidelines:</span>
+              </div>
+              <p>• Overtime entries are verified against shift schedules and loom operation logs.</p>
+              <p>• You can update your overtime work details at any time before final checkout.</p>
+              <p>• Overtime earnings will be settled in your weekly / monthly payroll calculation.</p>
             </div>
           </div>
         )}
@@ -703,11 +1088,19 @@ export const WorkerDashboard: React.FC = () => {
               </div>
 
               <div className="p-3 bg-slate-50 rounded-xl flex justify-between items-center">
+                <span className="text-slate-500 font-medium">Factory Unit</span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-black bg-purple-50 text-purple-900 border border-purple-200">
+                  <Building2 className="w-3.5 h-3.5 text-purple-700" />
+                  <span>{statusData?.worker?.unit || user?.unit || 'Unit 1'}</span>
+                </span>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl flex justify-between items-center">
                 <span className="text-slate-500 font-medium">Wage Model</span>
                 <span className="font-bold text-navy-950">
                   {hasCustomWageAccess ? (
                     <span className="text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded text-xs font-semibold">
-                      Custom (Machines &amp; Hours Operated)
+                      Custom (₹{statusData?.worker?.customWageRate ?? user?.customWageRate ?? 0}/mc/hr)
                     </span>
                   ) : (
                     <span>Fixed Daily Wage {user?.dailyWage ? `(₹${user.dailyWage}/day)` : ''}</span>
@@ -863,77 +1256,152 @@ export const WorkerDashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* OVERTIME / MACHINE SECTION */}
-          <div className="p-3.5 bg-amber-50/80 rounded-xl border border-amber-200 space-y-3">
+          {/* SHIFT WORK SECTION */}
+          {hasCustomWageAccess && (
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-navy-950 flex items-center gap-1.5">
+                  <Cpu className="w-3.5 h-3.5 text-teal-700" />
+                  <span>Standard Shift Work</span>
+                </span>
+                <span className="text-[10px] text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200 font-bold uppercase">
+                  Shift Duty
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Shift Machines Operated
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 2"
+                    value={machinesOperated}
+                    onChange={(e) => setMachinesOperated(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Shift Hours Worked
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="e.g. 8"
+                    value={hoursOperated}
+                    onChange={(e) => setHoursOperated(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* DEDICATED OVERTIME SECTION */}
+          <div className="p-3.5 bg-orange-50/80 rounded-xl border border-orange-200 space-y-3">
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={hasOvertime || hasCustomWageAccess}
+                  checked={hasOvertime || Boolean(overtimeMachines) || Boolean(overtimeHours)}
                   onChange={(e) => setHasOvertime(e.target.checked)}
-                  className="rounded text-amber-600 focus:ring-amber-500 h-4 w-4"
+                  className="rounded text-orange-600 focus:ring-orange-500 h-4 w-4"
                 />
-                <span className="text-xs font-bold text-amber-950">
-                  Overtime / Machine Operations Section
+                <span className="text-xs font-bold text-orange-950 flex items-center gap-1.5">
+                  <Timer className="w-3.5 h-3.5 text-orange-700" />
+                  <span>Overtime (OT) Work Section</span>
                 </span>
               </label>
-              {(hasOvertime || hasCustomWageAccess) && (
-                <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded border border-amber-200">
-                  Overtime / Machines Active
+              {(hasOvertime || Boolean(overtimeMachines) || Boolean(overtimeHours)) && (
+                <span className="text-[10px] font-bold text-orange-800 bg-orange-100 px-2 py-0.5 rounded border border-orange-200 uppercase">
+                  OT Active
                 </span>
               )}
             </div>
 
-            {(hasOvertime || hasCustomWageAccess) ? (
+            {(hasOvertime || Boolean(overtimeMachines) || Boolean(overtimeHours)) ? (
               <div className="space-y-3 pt-1">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    How Many Machines Operated? *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    placeholder="e.g. 2 (Number of machines)"
-                    value={machinesOperated}
-                    onChange={(e) => setMachinesOperated(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-amber-500"
-                  />
-                  <span className="text-[10px] text-slate-500">Number of machines operated during shift or overtime</span>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      OT Machines Operated *
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="e.g. 2 (OT Looms)"
+                      value={overtimeMachines}
+                      onChange={(e) => setOvertimeMachines(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      OT Hours Worked *
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="e.g. 3.5 (OT Hours)"
+                      value={overtimeHours}
+                      onChange={(e) => setOvertimeHours(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    How Many Hours Operated? *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0.1"
-                    required
-                    placeholder="e.g. 8.5 (Hours operated)"
-                    value={hoursOperated}
-                    onChange={(e) => setHoursOperated(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-amber-500"
-                  />
-                  <span className="text-[10px] text-slate-400">Pre-calculated from your shift timer. Adjust if needed.</span>
-                </div>
-
-                {statusData?.worker?.customWageRate && machinesOperated && hoursOperated && (
-                  <div className="p-2.5 bg-slate-900 text-white rounded-lg flex items-center justify-between text-xs">
-                    <span className="text-slate-300">Projected Wage (@ ₹{statusData.worker.customWageRate}/mc/hr):</span>
-                    <strong className="text-amber-400 font-mono text-sm">
-                      ₹{Math.round(parseInt(machinesOperated, 10) * parseFloat(hoursOperated) * statusData.worker.customWageRate).toLocaleString('en-IN')}
+                {statusData?.worker?.customWageRate && overtimeMachines && overtimeHours && Number(overtimeMachines) > 0 && Number(overtimeHours) > 0 && (
+                  <div className="p-2.5 bg-orange-100/70 border border-orange-200 rounded-lg flex items-center justify-between text-xs">
+                    <span className="text-orange-900 font-semibold">Overtime Payout Preview:</span>
+                    <strong className="text-orange-950 font-mono text-sm font-black">
+                      ₹{Math.round(Number(overtimeMachines) * Number(overtimeHours) * statusData.worker.customWageRate).toLocaleString('en-IN')}
                     </strong>
                   </div>
                 )}
               </div>
             ) : (
-              <p className="text-[11px] text-amber-800 leading-relaxed">
-                Check the box above if you worked overtime or operated machines to report machine counts and hours.
+              <p className="text-[11px] text-orange-800 leading-relaxed">
+                Check the box above if you operated machines or worked overtime beyond standard hours today.
               </p>
             )}
           </div>
+
+          {/* COMBINED PROJECTED PAYOUT SUMMARY */}
+          {statusData?.worker?.customWageRate && (
+            (() => {
+              const rate = statusData.worker.customWageRate;
+              const shiftM = machinesOperated ? Number(machinesOperated) : 0;
+              const shiftH = hoursOperated ? Number(hoursOperated) : 0;
+              const otM = overtimeMachines ? Number(overtimeMachines) : 0;
+              const otH = overtimeHours ? Number(overtimeHours) : 0;
+              const shiftPay = shiftM * shiftH * rate;
+              const otPay = otM * otH * rate;
+              const total = Math.round(shiftPay + otPay);
+              if (total <= 0) return null;
+
+              return (
+                <div className="p-3 bg-slate-900 text-white rounded-xl space-y-1">
+                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <span>Shift: ₹{Math.round(shiftPay).toLocaleString('en-IN')} | OT: ₹{Math.round(otPay).toLocaleString('en-IN')}</span>
+                    <span className="font-mono text-slate-400">Rate: ₹{rate}/mc/hr</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-800">
+                    <span className="text-xs font-bold text-slate-200">Combined Total Today:</span>
+                    <strong className="text-base font-black text-amber-400 font-mono">
+                      ₹{total.toLocaleString('en-IN')}
+                    </strong>
+                  </div>
+                </div>
+              );
+            })()
+          )}
 
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
             <button

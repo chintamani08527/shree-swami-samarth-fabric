@@ -79,7 +79,13 @@ export const attendanceApi = {
     });
   },
 
-  checkOut: (options?: { workerUserId?: string; machinesOperated?: number; hoursOperated?: number } | string) => {
+  checkOut: (options?: {
+    workerUserId?: string;
+    machinesOperated?: number;
+    hoursOperated?: number;
+    overtimeMachines?: number;
+    overtimeHours?: number;
+  } | string) => {
     let payload: Record<string, any> = {};
     if (typeof options === 'string') {
       payload.workerUserId = options;
@@ -92,8 +98,24 @@ export const attendanceApi = {
     });
   },
 
-  logCustomWageWork: (data: { machinesOperated?: number; hoursOperated?: number; remarks?: string }) =>
+  logCustomWageWork: (data: {
+    machinesOperated?: number;
+    hoursOperated?: number;
+    overtimeMachines?: number;
+    overtimeHours?: number;
+    remarks?: string;
+  }) =>
     request<{ success: boolean; message: string; data: any }>('/attendance/custom-wage-log', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  logOvertimeWork: (data: {
+    overtimeMachines?: number;
+    overtimeHours?: number;
+    remarks?: string;
+  }) =>
+    request<{ success: boolean; message: string; data: any }>('/attendance/overtime-log', {
       method: 'POST',
       body: JSON.stringify(data),
     }),

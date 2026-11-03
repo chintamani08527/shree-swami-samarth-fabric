@@ -185,6 +185,8 @@ export async function processCheckOut(
   customDetails?: {
     machinesOperated?: number | null;
     hoursOperated?: number | null;
+    overtimeMachines?: number | null;
+    overtimeHours?: number | null;
   }
 ) {
   const serverNow = new Date(); // Server-authoritative timestamp
@@ -261,7 +263,9 @@ export async function processCheckOut(
       checkOutAt: serverNow,
       workingMinutes: calc.workingMinutes,
       breakMinutes: calc.breakMinutes,
-      overtimeMinutes: calc.overtimeMinutes,
+      overtimeMinutes: customDetails?.overtimeHours !== undefined && customDetails.overtimeHours !== null
+        ? Math.max(calc.overtimeMinutes, Math.round(Number(customDetails.overtimeHours) * 60))
+        : calc.overtimeMinutes,
       lateMinutes: calc.lateMinutes,
       status: calc.status,
       isMissingCheckOut: false,
@@ -270,6 +274,12 @@ export async function processCheckOut(
         : {}),
       ...(customDetails?.hoursOperated !== undefined && customDetails.hoursOperated !== null
         ? { hoursOperated: Number(customDetails.hoursOperated) }
+        : {}),
+      ...(customDetails?.overtimeMachines !== undefined && customDetails.overtimeMachines !== null
+        ? { overtimeMachines: Number(customDetails.overtimeMachines) }
+        : {}),
+      ...(customDetails?.overtimeHours !== undefined && customDetails.overtimeHours !== null
+        ? { overtimeHours: Number(customDetails.overtimeHours) }
         : {}),
     },
   });
@@ -296,9 +306,11 @@ export async function processCheckOut(
     record: updatedRecord,
     workingHours: calc.workingHours,
     breakMinutes: calc.breakMinutes,
-    overtimeMinutes: calc.overtimeMinutes,
+    overtimeMinutes: updatedRecord.overtimeMinutes,
     machinesOperated: updatedRecord.machinesOperated,
     hoursOperated: updatedRecord.hoursOperated,
+    overtimeMachines: updatedRecord.overtimeMachines,
+    overtimeHours: updatedRecord.overtimeHours,
     message: `Thank you, ${user.name}! Check-out recorded at ${formatKolkataTime(serverNow)}. Total working hours: ${calc.workingHours} hrs.`,
   };
 }
@@ -311,6 +323,8 @@ export async function logCustomWageWork(
   data: {
     machinesOperated?: number | null;
     hoursOperated?: number | null;
+    overtimeMachines?: number | null;
+    overtimeHours?: number | null;
     remarks?: string;
   }
 ) {
@@ -326,7 +340,9 @@ export async function logCustomWageWork(
     throw new Error('Worker account has been deactivated by administrator.');
   }
 
-  if (!user.hasCustomWageAccess && user.wageType !== 'CUSTOM') {
+  const isOvertimeLogging = (data.overtimeMachines !== undefined || data.overtimeHours !== undefined) &&
+    data.machinesOperated === undefined && data.hoursOperated === undefined;
+  if (!user.hasCustomWageAccess && user.wageType !== 'CUSTOM' && !isOvertimeLogging) {
     throw new Error('Custom wage access has not been granted for this account. Please contact Factory Admin to enable custom wages.');
   }
 
@@ -349,6 +365,8 @@ export async function logCustomWageWork(
         source: AttendanceSources.WEB_MOBILE,
         machinesOperated: data.machinesOperated !== undefined && data.machinesOperated !== null ? Number(data.machinesOperated) : null,
         hoursOperated: data.hoursOperated !== undefined && data.hoursOperated !== null ? Number(data.hoursOperated) : null,
+        overtimeMachines: data.overtimeMachines !== undefined && data.overtimeMachines !== null ? Number(data.overtimeMachines) : null,
+        overtimeHours: data.overtimeHours !== undefined && data.overtimeHours !== null ? Number(data.overtimeHours) : null,
         remarks: data.remarks || null,
       },
     });
@@ -358,6 +376,8 @@ export async function logCustomWageWork(
       data: {
         ...(data.machinesOperated !== undefined ? { machinesOperated: data.machinesOperated !== null ? Number(data.machinesOperated) : null } : {}),
         ...(data.hoursOperated !== undefined ? { hoursOperated: data.hoursOperated !== null ? Number(data.hoursOperated) : null } : {}),
+        ...(data.overtimeMachines !== undefined ? { overtimeMachines: data.overtimeMachines !== null ? Number(data.overtimeMachines) : null } : {}),
+        ...(data.overtimeHours !== undefined ? { overtimeHours: data.overtimeHours !== null ? Number(data.overtimeHours) : null } : {}),
         ...(data.remarks !== undefined ? { remarks: data.remarks } : {}),
       },
     });
@@ -463,12 +483,15 @@ export async function getWorkerStatus(userId: string) {
       lateMinutes: todayRecord?.lateMinutes || 0,
       machinesOperated: todayRecord?.machinesOperated ?? null,
       hoursOperated: todayRecord?.hoursOperated ?? null,
+      overtimeMachines: todayRecord?.overtimeMachines ?? null,
+      overtimeHours: todayRecord?.overtimeHours ?? (todayRecord?.overtimeMinutes ? Number((todayRecord.overtimeMinutes / 60).toFixed(1)) : null),
     },
     worker: {
       wageType: user.wageType || 'FIXED',
       hasCustomWageAccess: Boolean(user.hasCustomWageAccess || user.wageType === 'CUSTOM'),
       dailyWage: user.dailyWage,
       customWageRate: user.customWageRate,
+      unit: user.unit || 'Unit 1',
     },
     shift: shift ? {
       name: todayRecord?.shiftType === 'NIGHT' ? 'Night Shift (8:00 PM - 8:00 AM)' : (shift.name || 'Day Shift (8:00 AM - 8:00 PM)'),
@@ -531,6 +554,8 @@ export async function getWorkerAttendanceHistory(
     shiftType: r.shiftType || 'DAY',
     machinesOperated: r.machinesOperated ?? null,
     hoursOperated: r.hoursOperated ?? null,
+    overtimeMachines: r.overtimeMachines ?? null,
+    overtimeHours: r.overtimeHours ?? (r.overtimeMinutes ? Number((r.overtimeMinutes / 60).toFixed(1)) : null),
     isMissingCheckOut: r.isMissingCheckOut,
     remarks: r.remarks,
   }));
@@ -600,6 +625,7 @@ export async function listAttendanceRecords(params: {
             phone: true,
             wageType: true,
             hasCustomWageAccess: true,
+            unit: true,
             department: { select: { id: true, name: true } },
           },
         },
@@ -633,8 +659,11 @@ export async function listAttendanceRecords(params: {
     overtimeMinutes: r.overtimeMinutes,
     lateMinutes: r.lateMinutes,
     shiftType: r.shiftType || 'DAY',
+    unit: r.user.unit || 'Unit 1',
     machinesOperated: r.machinesOperated ?? null,
     hoursOperated: r.hoursOperated ?? null,
+    overtimeMachines: r.overtimeMachines ?? null,
+    overtimeHours: r.overtimeHours ?? (r.overtimeMinutes ? Number((r.overtimeMinutes / 60).toFixed(1)) : null),
     status: r.status,
     source: r.source,
     isMissingCheckOut: r.isMissingCheckOut,

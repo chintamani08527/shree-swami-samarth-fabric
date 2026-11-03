@@ -223,6 +223,7 @@ export async function getWeeklyAttendanceReport(refDateStr?: string, departmentI
       userId: w.id,
       workerId: w.workerId,
       name: w.name,
+      unit: w.unit || 'Unit 1',
       phone: w.phone,
       department: w.department?.name || 'Unassigned',
       shift: w.workerShifts[0]?.shift?.name || 'General Shift',
@@ -326,18 +327,23 @@ export async function getMonthlyAttendanceReport(refDateStr?: string, department
       customEarnings = w.attendanceRecords.reduce((sum: number, r: any) => {
         const m = r.machinesOperated ?? (r.workingMinutes > 0 ? 1 : 0);
         const h = r.hoursOperated ?? (r.workingMinutes / 60);
-        return sum + (m * h * customRate);
+        const otM = r.overtimeMachines ?? 0;
+        const otH = r.overtimeHours ?? (r.overtimeMinutes ? r.overtimeMinutes / 60 : 0);
+        const shiftPay = m * h * customRate;
+        const otPay = otM > 0 && otH > 0 ? otM * otH * customRate : otH * (customRate * (m || 1));
+        return sum + shiftPay + otPay;
       }, 0);
     }
 
     const estimatedPayout = isCustom
       ? Math.round(customEarnings)
-      : Math.round(daysPresent * dailyWage);
+      : Math.round(daysPresent * dailyWage + (totalOvertimeHours * (dailyWage / 8)));
 
     return {
       userId: w.id,
       workerId: w.workerId,
       name: w.name,
+      unit: w.unit || 'Unit 1',
       phone: w.phone,
       department: w.department?.name || 'Unassigned',
       shift: w.workerShifts[0]?.shift?.name || 'General Shift',
@@ -464,6 +470,7 @@ export async function getYearlyAttendanceReport(yearRef?: number | string, depar
       userId: w.id,
       workerId: w.workerId,
       name: w.name,
+      unit: w.unit || 'Unit 1',
       phone: w.phone,
       department: w.department?.name || 'Unassigned',
       shift: w.workerShifts[0]?.shift?.name || 'General Shift',

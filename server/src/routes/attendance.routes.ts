@@ -68,6 +68,8 @@ router.post('/check-out', async (req: Request, res: Response) => {
     const customDetails = {
       machinesOperated: req.body.machinesOperated !== undefined && req.body.machinesOperated !== null ? Number(req.body.machinesOperated) : undefined,
       hoursOperated: req.body.hoursOperated !== undefined && req.body.hoursOperated !== null ? Number(req.body.hoursOperated) : undefined,
+      overtimeMachines: req.body.overtimeMachines !== undefined && req.body.overtimeMachines !== null ? Number(req.body.overtimeMachines) : undefined,
+      overtimeHours: req.body.overtimeHours !== undefined && req.body.overtimeHours !== null ? Number(req.body.overtimeHours) : undefined,
     };
 
     const result = await processCheckOut(targetUserId, source, adminActor, customDetails);
@@ -81,6 +83,8 @@ router.post('/check-out', async (req: Request, res: Response) => {
       overtimeMinutes: result.overtimeMinutes,
       machinesOperated: result.machinesOperated,
       hoursOperated: result.hoursOperated,
+      overtimeMachines: result.overtimeMachines,
+      overtimeHours: result.overtimeHours,
     });
   } catch (error: any) {
     res.status(400).json({
@@ -93,10 +97,12 @@ router.post('/check-out', async (req: Request, res: Response) => {
 // 2b. Worker: Log or update custom wage work details (machines & hours operated)
 router.post('/custom-wage-log', async (req: Request, res: Response) => {
   try {
-    const { machinesOperated, hoursOperated, remarks } = req.body;
+    const { machinesOperated, hoursOperated, overtimeMachines, overtimeHours, remarks } = req.body;
     const record = await logCustomWageWork(req.user!.id, {
       machinesOperated: machinesOperated !== undefined && machinesOperated !== null ? Number(machinesOperated) : null,
       hoursOperated: hoursOperated !== undefined && hoursOperated !== null ? Number(hoursOperated) : null,
+      overtimeMachines: overtimeMachines !== undefined && overtimeMachines !== null ? Number(overtimeMachines) : null,
+      overtimeHours: overtimeHours !== undefined && overtimeHours !== null ? Number(overtimeHours) : null,
       remarks,
     });
 
@@ -109,6 +115,29 @@ router.post('/custom-wage-log', async (req: Request, res: Response) => {
     res.status(400).json({
       success: false,
       message: error.message || 'Failed to log custom wage details.',
+    });
+  }
+});
+
+// 2c. Worker: Overtime Portal Log (overtime machines & hours)
+router.post('/overtime-log', async (req: Request, res: Response) => {
+  try {
+    const { overtimeMachines, overtimeHours, remarks } = req.body;
+    const record = await logCustomWageWork(req.user!.id, {
+      overtimeMachines: overtimeMachines !== undefined && overtimeMachines !== null ? Number(overtimeMachines) : null,
+      overtimeHours: overtimeHours !== undefined && overtimeHours !== null ? Number(overtimeHours) : null,
+      remarks,
+    });
+
+    res.json({
+      success: true,
+      message: 'Overtime details recorded successfully in Overtime Portal.',
+      data: record,
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      message: error.message || 'Failed to log overtime details.',
     });
   }
 });

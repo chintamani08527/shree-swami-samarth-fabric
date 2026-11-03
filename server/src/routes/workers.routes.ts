@@ -31,6 +31,7 @@ const createWorkerSchema = z.object({
     dailyWage: z.number().nullable().optional(),
     customWageRate: z.number().nullable().optional(),
     hasCustomWageAccess: z.boolean().optional(),
+    unit: z.string().optional(),
     joiningDate: z.string().optional(),
   }),
 });
@@ -38,7 +39,7 @@ const createWorkerSchema = z.object({
 // List workers: Admin & Supervisor
 router.get('/', requireSupervisorOrAdmin, async (req: Request, res: Response) => {
   try {
-    const { search, departmentId, role, isActive, page, limit } = req.query;
+    const { search, departmentId, role, isActive, unit, page, limit } = req.query;
 
     // If supervisor, only allow viewing their assigned department if assigned
     let targetDeptId = departmentId as string | undefined;
@@ -51,6 +52,7 @@ router.get('/', requireSupervisorOrAdmin, async (req: Request, res: Response) =>
       departmentId: targetDeptId,
       role: role as any,
       isActive: isActive !== undefined ? isActive === 'true' : undefined,
+      unit: unit as string,
       page: page ? parseInt(page as string, 10) : 1,
       limit: limit ? parseInt(limit as string, 10) : 20,
     });

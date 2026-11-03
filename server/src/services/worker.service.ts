@@ -7,6 +7,7 @@ import { invalidateAuthCache } from '../middleware/auth.js';
 export async function listWorkers(params: {
   search?: string;
   departmentId?: string;
+  unit?: string;
   role?: RoleType;
   isActive?: boolean;
   page?: number;
@@ -32,6 +33,10 @@ export async function listWorkers(params: {
 
   if (params.departmentId) {
     where.departmentId = params.departmentId;
+  }
+
+  if (params.unit) {
+    where.unit = params.unit;
   }
 
   if (params.search) {
@@ -71,6 +76,7 @@ export async function listWorkers(params: {
     dailyWage: u.dailyWage,
     customWageRate: u.customWageRate,
     hasCustomWageAccess: Boolean(u.hasCustomWageAccess),
+    unit: u.unit || 'Unit 1',
     isActive: u.isActive,
     department: u.department ? { id: u.department.id, name: u.department.name } : null,
     shift: u.workerShifts[0]?.shift ? {
@@ -121,6 +127,7 @@ export async function getWorkerById(id: string) {
     dailyWage: user.dailyWage,
     customWageRate: user.customWageRate,
     hasCustomWageAccess: Boolean(user.hasCustomWageAccess),
+    unit: user.unit || 'Unit 1',
     isActive: user.isActive,
     department: user.department,
     shift: user.workerShifts[0]?.shift || null,
@@ -142,6 +149,7 @@ export async function createWorker(
     dailyWage?: number | null;
     customWageRate?: number | null;
     hasCustomWageAccess?: boolean;
+    unit?: string;
     joiningDate?: string;
   },
   adminActor: { id: string; name: string }
@@ -173,6 +181,7 @@ export async function createWorker(
       dailyWage: isCustom ? null : (data.dailyWage !== undefined && data.dailyWage !== null ? Number(data.dailyWage) : null),
       customWageRate: isCustom ? (data.customWageRate !== undefined && data.customWageRate !== null ? Number(data.customWageRate) : null) : null,
       hasCustomWageAccess,
+      unit: data.unit ? data.unit.trim() : 'Unit 1',
       departmentId: data.departmentId || null,
       isActive: true,
       joiningDate: data.joiningDate ? new Date(data.joiningDate) : new Date(),
@@ -216,6 +225,7 @@ export async function updateWorker(
     dailyWage?: number | null;
     customWageRate?: number | null;
     hasCustomWageAccess?: boolean;
+    unit?: string;
     isActive?: boolean;
     joiningDate?: string;
   },
@@ -249,6 +259,7 @@ export async function updateWorker(
         : data.customWageRate !== undefined
         ? { customWageRate: data.customWageRate !== null ? Number(data.customWageRate) : null }
         : {}),
+      ...(data.unit !== undefined ? { unit: data.unit ? data.unit.trim() : 'Unit 1' } : {}),
       ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
       ...(data.joiningDate ? { joiningDate: new Date(data.joiningDate) } : {}),
     },
