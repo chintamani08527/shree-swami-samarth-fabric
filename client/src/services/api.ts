@@ -190,6 +190,35 @@ export const workersApi = {
     }),
 };
 
+// Universal File Downloader (Coordinates seamlessly between Web browsers and Native Android App)
+export async function triggerFileDownload(blob: Blob, filename: string) {
+  const bridge = typeof window !== 'undefined' ? (window as any).AndroidBridge : null;
+  if (bridge && typeof bridge.downloadBase64File === 'function') {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = (reader.result as string) || '';
+      const base64 = result.includes(',') ? result.split(',')[1] : result;
+      bridge.downloadBase64File(
+        base64,
+        filename,
+        blob.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+    };
+    reader.readAsDataURL(blob);
+    return;
+  }
+
+  // Standard web browser fallback
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 1500);
+}
+
 // 4. Reports API
 export const reportsApi = {
   getDashboard: (date?: string) => {
@@ -223,14 +252,7 @@ export const reportsApi = {
     }
 
     const blob = await res.blob();
-    const downloadUrl = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = `SSF_Weekly_Attendance_${refDate || 'Current'}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.URL.revokeObjectURL(downloadUrl);
+    await triggerFileDownload(blob, `SSF_Weekly_Attendance_${refDate || 'Current'}.xlsx`);
   },
 
   getMonthly: (refDate?: string, departmentId?: string) => {
@@ -259,14 +281,7 @@ export const reportsApi = {
     }
 
     const blob = await res.blob();
-    const downloadUrl = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = `SSF_Monthly_Attendance_${refDate || 'Current'}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.URL.revokeObjectURL(downloadUrl);
+    await triggerFileDownload(blob, `SSF_Monthly_Attendance_${refDate || 'Current'}.xlsx`);
   },
 
   getYearly: (year?: string | number, departmentId?: string) => {
@@ -295,14 +310,7 @@ export const reportsApi = {
     }
 
     const blob = await res.blob();
-    const downloadUrl = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = `SSF_Yearly_Attendance_${year || 'Current'}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.URL.revokeObjectURL(downloadUrl);
+    await triggerFileDownload(blob, `SSF_Yearly_Attendance_${year || 'Current'}.xlsx`);
   },
 
   downloadSalaryExcel: async (refDate?: string, periodType: 'MONTHLY' | 'WEEKLY' = 'MONTHLY', departmentId?: string) => {
@@ -325,14 +333,7 @@ export const reportsApi = {
     }
 
     const blob = await res.blob();
-    const downloadUrl = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = `SSF_Salary_Calculation_${refDate || 'Current'}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.URL.revokeObjectURL(downloadUrl);
+    await triggerFileDownload(blob, `SSF_Salary_Calculation_${refDate || 'Current'}.xlsx`);
   },
 };
 

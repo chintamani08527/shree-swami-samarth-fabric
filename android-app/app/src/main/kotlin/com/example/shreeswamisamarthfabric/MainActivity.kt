@@ -2,6 +2,7 @@ package com.example.shreeswamisamarthfabric
 
 import android.annotation.SuppressLint
 import android.app.DownloadManager
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -15,6 +16,8 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.provider.MediaStore
+import android.util.Base64
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
@@ -34,6 +37,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import java.io.File
 
 class MainActivity : ComponentActivity() {
 
@@ -247,6 +251,37 @@ class MainActivity : ComponentActivity() {
     private fun setupDownloadListener() {
         webView.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
             try {
+                if (url.startsWith("blob:") || url.startsWith("data:")) {
+                    // Blob/Data URLs cannot be fetched directly by system DownloadManager.
+                    // Read the blob data directly inside WebView JavaScript and pass to AndroidBridge!
+                    val effectiveMime = if (!mimeType.isNullOrBlank()) mimeType else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    val filename = URLUtil.guessFileName(url, contentDisposition, effectiveMime)
+                    val js = """
+                        (function() {
+                            fetch('$url')
+                                .then(function(res) { return res.blob(); })
+                                .then(function(blob) {
+                                    var reader = new FileReader();
+                                    reader.onloadend = function() {
+                                        var result = reader.result || '';
+                                        var base64 = result.indexOf(',') !== -1 ? result.split(',')[1] : result;
+                                        if (base64 && window.AndroidBridge && window.AndroidBridge.downloadBase64File) {
+                                            window.AndroidBridge.downloadBase64File(base64, '$filename', '$effectiveMime');
+                                        }
+                                    };
+                                    reader.readAsDataURL(blob);
+                                })
+                                .catch(function(err) {
+                                    if (window.AndroidBridge && window.AndroidBridge.showToast) {
+                                        window.AndroidBridge.showToast('Download error: ' + err);
+                                    }
+                                });
+                        })();
+                    """.trimIndent()
+                    webView.evaluateJavascript(js, null)
+                    return@setDownloadListener
+                }
+
                 val request = DownloadManager.Request(Uri.parse(url)).apply {
                     setMimeType(mimeType)
                     addRequestHeader("User-Agent", userAgent)
@@ -355,6 +390,71 @@ class MainActivity : ComponentActivity() {
                     vibrator?.vibrate(VibrationEffect.createOneShot(80, VibrationEffect.DEFAULT_AMPLITUDE))
                 }
             } catch (_: Exception) {}
+        }
+
+        @JavascriptInterface
+        fun downloadBase64File(base64Data: String, fileName: String, mimeType: String) {
+            runOnUiThread {
+                try {
+                    val bytes = Base64.decode(base64Data, Base64.DEFAULT)
+                    val cleanFileName = if (fileName.isNotBlank()) fileName else "SSF_Attendance_Report.xlsx"
+                    val effectiveMime = if (mimeType.isNotBlank()) mimeType else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    var savedUri: Uri? = null
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val contentValues = ContentValues().apply {
+                            put(MediaStore.MediaColumns.DISPLAY_NAME, cleanFileName)
+                            put(MediaStore.MediaColumns.MIME_TYPE, effectiveMime)
+                            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                        }
+                        val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                        if (uri != null) {
+                            context.contentResolver.openOutputStream(uri)?.use { os ->
+                                os.write(bytes)
+                                os.flush()
+                            }
+                            savedUri = uri
+                        }
+                    } else {
+                        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                        if (!downloadsDir.exists()) downloadsDir.mkdirs()
+                        val file = File(downloadsDir, cleanFileName)
+                        file.outputStream().use { os ->
+                            os.write(bytes)
+                            os.flush()
+                        }
+                        val dm = getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+                        dm?.addCompletedDownload(
+                            cleanFileName,
+                            "Downloaded from Shree Swami Samarth Fabric",
+                            true,
+                            effectiveMime,
+                            file.absolutePath,
+                            bytes.size.toLong(),
+                            true
+                        )
+                        savedUri = Uri.fromFile(file)
+                    }
+
+                    Toast.makeText(context, "✅ Excel saved to Downloads folder: $cleanFileName", Toast.LENGTH_LONG).show()
+
+                    // Automatically attempt to prompt opening file if a viewer is available
+                    savedUri?.let { fileUri ->
+                        try {
+                            val openIntent = Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(fileUri, effectiveMime)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            val chooser = Intent.createChooser(openIntent, "Open Excel sheet with...")
+                            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(chooser)
+                        } catch (_: Exception) {}
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Failed to save Excel file: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 }
