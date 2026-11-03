@@ -19,6 +19,105 @@ import { Modal } from '../../components/common/Modal.tsx';
 import { useToast } from '../../context/ToastContext.tsx';
 import { useAuth } from '../../context/AuthContext.tsx';
 
+// Helper Salary Projection Breakdown Card (Week, Month, Year)
+const SalaryProjectionCard: React.FC<{
+  wageType: 'FIXED' | 'CUSTOM';
+  dailyWage?: number | string;
+  customWageRate?: number | string;
+}> = ({ wageType, dailyWage, customWageRate }) => {
+  const [simMachines, setSimMachines] = useState(1);
+  const [simHours, setSimHours] = useState(8);
+
+  const rate = wageType === 'CUSTOM' ? parseFloat(String(customWageRate || 0)) : 0;
+  const fixedDay = wageType === 'FIXED' ? parseFloat(String(dailyWage || 0)) : 0;
+
+  if (wageType === 'CUSTOM' && (!rate || rate <= 0)) return null;
+  if (wageType === 'FIXED' && (!fixedDay || fixedDay <= 0)) return null;
+
+  const daySalary = wageType === 'CUSTOM' ? rate * simMachines * simHours : fixedDay;
+  const weekSalary = Math.round(daySalary * 6);
+  const monthSalary = Math.round(daySalary * 26);
+  const yearSalary = Math.round(monthSalary * 12);
+
+  return (
+    <div className="mt-3 p-3 bg-slate-900 text-white rounded-xl border border-slate-800 space-y-2.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+          <span>📊</span>
+          <span>Projected Salary Calculation</span>
+        </span>
+        {wageType === 'CUSTOM' ? (
+          <span className="text-[10px] text-slate-400 font-mono">
+            Rate: ₹{rate}/mach/hr
+          </span>
+        ) : (
+          <span className="text-[10px] text-slate-400 font-mono">
+            Rate: ₹{fixedDay}/day
+          </span>
+        )}
+      </div>
+
+      {wageType === 'CUSTOM' && (
+        <div className="flex flex-wrap items-center gap-2 text-[11px] bg-slate-800/80 p-2 rounded-lg border border-slate-700">
+          <span className="text-slate-400 font-medium">Calculate for:</span>
+          <div className="flex items-center gap-1">
+            <span className="text-slate-300">Machines:</span>
+            <select
+              value={simMachines}
+              onChange={(e) => setSimMachines(Number(e.target.value))}
+              className="bg-slate-950 text-white border border-slate-600 rounded px-1.5 py-0.5 text-xs font-bold font-mono focus:ring-1 focus:ring-amber-500"
+            >
+              <option value="1">1 Machine</option>
+              <option value="2">2 Machines</option>
+              <option value="3">3 Machines</option>
+              <option value="4">4 Machines</option>
+              <option value="6">6 Machines</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-slate-300">Hours/day:</span>
+            <select
+              value={simHours}
+              onChange={(e) => setSimHours(Number(e.target.value))}
+              className="bg-slate-950 text-white border border-slate-600 rounded px-1.5 py-0.5 text-xs font-bold font-mono focus:ring-1 focus:ring-amber-500"
+            >
+              <option value="8">8 hrs (Normal)</option>
+              <option value="10">10 hrs</option>
+              <option value="12">12 hrs (Full)</option>
+            </select>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-2 text-center pt-0.5">
+        <div className="bg-slate-800/70 p-2 rounded-lg border border-slate-700/60">
+          <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Week (6 Days)</div>
+          <div className="text-sm font-extrabold font-mono text-emerald-400 mt-0.5">
+            ₹{weekSalary.toLocaleString('en-IN')}
+          </div>
+          <div className="text-[9px] text-slate-400">₹{Math.round(daySalary).toLocaleString('en-IN')}/day</div>
+        </div>
+
+        <div className="bg-slate-800/70 p-2 rounded-lg border border-slate-700/60 ring-1 ring-amber-500/30">
+          <div className="text-[10px] uppercase font-bold tracking-wider text-amber-300">Month (26 Days)</div>
+          <div className="text-sm font-extrabold font-mono text-amber-400 mt-0.5">
+            ₹{monthSalary.toLocaleString('en-IN')}
+          </div>
+          <div className="text-[9px] text-slate-400">26 working days</div>
+        </div>
+
+        <div className="bg-slate-800/70 p-2 rounded-lg border border-slate-700/60">
+          <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Year (12 Mos)</div>
+          <div className="text-sm font-extrabold font-mono text-teal-400 mt-0.5">
+            ₹{yearSalary.toLocaleString('en-IN')}
+          </div>
+          <div className="text-[9px] text-slate-400">Annual estimate</div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const WorkerManagement: React.FC = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -45,6 +144,7 @@ export const WorkerManagement: React.FC = () => {
   const [newWageType, setNewWageType] = useState<'FIXED' | 'CUSTOM'>('FIXED');
   const [newHasCustomAccess, setNewHasCustomAccess] = useState<boolean>(true);
   const [newDailyWage, setNewDailyWage] = useState<string>('');
+  const [newCustomWageRate, setNewCustomWageRate] = useState<string>('');
   const [newPin, setNewPin] = useState('1234');
   const [savingWorker, setSavingWorker] = useState(false);
 
@@ -58,6 +158,7 @@ export const WorkerManagement: React.FC = () => {
   const [editWageType, setEditWageType] = useState<'FIXED' | 'CUSTOM'>('FIXED');
   const [editHasCustomAccess, setEditHasCustomAccess] = useState<boolean>(false);
   const [editDailyWage, setEditDailyWage] = useState<string>('');
+  const [editCustomWageRate, setEditCustomWageRate] = useState<string>('');
   const [editReason, setEditReason] = useState('');
 
   // Reset PIN Modal State
@@ -122,6 +223,7 @@ export const WorkerManagement: React.FC = () => {
         wageType: newWageType,
         hasCustomWageAccess: newWageType === 'CUSTOM' ? newHasCustomAccess : false,
         dailyWage: newWageType === 'FIXED' && newDailyWage ? parseFloat(newDailyWage) : undefined,
+        customWageRate: newWageType === 'CUSTOM' && newCustomWageRate ? parseFloat(newCustomWageRate) : undefined,
         passwordOrPin: newPin,
       });
 
@@ -135,6 +237,7 @@ export const WorkerManagement: React.FC = () => {
         setNewWageType('FIXED');
         setNewHasCustomAccess(true);
         setNewDailyWage('');
+        setNewCustomWageRate('');
         setNewPin('1234');
         await loadWorkers();
       }
@@ -155,6 +258,7 @@ export const WorkerManagement: React.FC = () => {
     setEditWageType(worker.wageType === 'CUSTOM' ? 'CUSTOM' : 'FIXED');
     setEditHasCustomAccess(Boolean(worker.hasCustomWageAccess));
     setEditDailyWage(worker.dailyWage ? String(worker.dailyWage) : '');
+    setEditCustomWageRate(worker.customWageRate ? String(worker.customWageRate) : '');
     setEditReason('');
     setEditModalOpen(true);
   };
@@ -172,6 +276,7 @@ export const WorkerManagement: React.FC = () => {
         wageType: editWageType,
         hasCustomWageAccess: editWageType === 'CUSTOM' ? editHasCustomAccess : false,
         dailyWage: editWageType === 'FIXED' && editDailyWage ? parseFloat(editDailyWage) : null,
+        customWageRate: editWageType === 'CUSTOM' && editCustomWageRate ? parseFloat(editCustomWageRate) : null,
         reason: editReason.trim() || undefined,
       });
       if (res.success) {
@@ -345,17 +450,24 @@ export const WorkerManagement: React.FC = () => {
                     <td className="py-3 px-4 text-right">
                       {w.wageType === 'CUSTOM' || w.hasCustomWageAccess ? (
                         <div className="inline-flex flex-col items-end">
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold tracking-tight text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                            Custom (Machines & Hrs)
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold font-mono text-amber-900 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                            ₹{w.customWageRate ?? 0}/mach/hr
                           </span>
-                          {w.hasCustomWageAccess && (
-                            <span className="text-[9px] text-teal-700 font-semibold mt-0.5">Custom Access ON</span>
-                          )}
+                          <span className="text-[9px] text-slate-500 font-medium mt-0.5">
+                            ~₹{Math.round((w.customWageRate || 0) * 8 * 26).toLocaleString('en-IN')}/mo
+                          </span>
                         </div>
                       ) : (
-                        <span className="font-mono font-bold text-navy-950 text-xs">
-                          {w.dailyWage ? `₹${w.dailyWage}/day` : '₹0 / Unset'}
-                        </span>
+                        <div className="inline-flex flex-col items-end">
+                          <span className="font-mono font-bold text-navy-950 text-xs">
+                            {w.dailyWage ? `₹${w.dailyWage}/day` : '₹0 / Unset'}
+                          </span>
+                          {w.dailyWage ? (
+                            <span className="text-[9px] text-slate-500 font-medium mt-0.5">
+                              ~₹{Math.round(w.dailyWage * 26).toLocaleString('en-IN')}/mo
+                            </span>
+                          ) : null}
+                        </div>
                       )}
                     </td>
                     <td className="py-3 px-4 text-slate-600 text-xs">
@@ -520,26 +632,50 @@ export const WorkerManagement: React.FC = () => {
                 <p className="text-[11px] text-slate-500 mt-1">
                   Admin specifies the fixed amount payable per day.
                 </p>
+                <SalaryProjectionCard wageType="FIXED" dailyWage={newDailyWage} />
               </div>
             ) : (
-              <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-3 text-xs text-amber-900 space-y-2">
-                <div className="font-bold flex items-center gap-1.5 text-amber-900">
-                  <span>⚙️</span> Custom Wage: Fixed wage entry is disabled for Admin
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Wage Rate for 1 Machine per 1 Hour (₹) *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">₹</span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      required
+                      placeholder="Enter wage for 1 machine 1 hour (e.g. 50)"
+                      value={newCustomWageRate}
+                      onChange={(e) => setNewCustomWageRate(e.target.value)}
+                      className="w-full pl-7 pr-3 py-2 border border-slate-200 rounded-xl text-xs font-mono focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Wage rate for operating 1 machine for 1 hour. Total salary is calculated accordingly for week, month, and year.
+                  </p>
                 </div>
-                <p className="text-[11px] text-amber-700 leading-relaxed">
-                  Worker will log their operated machine count and total working hours directly on their worker page.
-                </p>
-                <label className="flex items-center gap-2 pt-1 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={newHasCustomAccess}
-                    onChange={(e) => setNewHasCustomAccess(e.target.checked)}
-                    className="rounded text-amber-600 focus:ring-amber-500 h-4 w-4"
-                  />
-                  <span className="text-xs font-bold text-amber-950">
-                    Grant Custom Wage Access (Enable machine &amp; hour inputs on Worker Page)
-                  </span>
-                </label>
+
+                <SalaryProjectionCard wageType="CUSTOM" customWageRate={newCustomWageRate} />
+
+                <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-3 text-xs text-amber-900 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newHasCustomAccess}
+                      onChange={(e) => setNewHasCustomAccess(e.target.checked)}
+                      className="rounded text-amber-600 focus:ring-amber-500 h-4 w-4"
+                    />
+                    <span className="text-xs font-bold text-amber-950">
+                      Grant Custom Wage Access (Enable machine &amp; hour inputs on Worker Page)
+                    </span>
+                  </label>
+                  <p className="text-[11px] text-amber-700 leading-relaxed">
+                    Worker will log their operated machine count and total working hours directly on their worker page.
+                  </p>
+                </div>
               </div>
             )}
           </div>
@@ -695,26 +831,50 @@ export const WorkerManagement: React.FC = () => {
                     className="w-full pl-7 pr-3 py-2 border border-slate-200 rounded-xl text-xs font-mono focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
+                <SalaryProjectionCard wageType="FIXED" dailyWage={editDailyWage} />
               </div>
             ) : (
-              <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-3 text-xs text-amber-900 space-y-2">
-                <div className="font-bold flex items-center gap-1.5 text-amber-900">
-                  <span>⚙️</span> Custom Wage: Fixed wage entry is disabled for Admin
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Wage Rate for 1 Machine per 1 Hour (₹) *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">₹</span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      required
+                      placeholder="Enter wage for 1 machine 1 hour (e.g. 50)"
+                      value={editCustomWageRate}
+                      onChange={(e) => setEditCustomWageRate(e.target.value)}
+                      className="w-full pl-7 pr-3 py-2 border border-slate-200 rounded-xl text-xs font-mono focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Wage rate for operating 1 machine for 1 hour. Total salary is calculated accordingly for week, month, and year.
+                  </p>
                 </div>
-                <p className="text-[11px] text-amber-700 leading-relaxed">
-                  Worker logs their operated machine count and total working hours directly on their worker page.
-                </p>
-                <label className="flex items-center gap-2 pt-1 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={editHasCustomAccess}
-                    onChange={(e) => setEditHasCustomAccess(e.target.checked)}
-                    className="rounded text-amber-600 focus:ring-amber-500 h-4 w-4"
-                  />
-                  <span className="text-xs font-bold text-amber-950">
-                    Grant Custom Wage Access (Enable machine &amp; hour inputs on Worker Page)
-                  </span>
-                </label>
+
+                <SalaryProjectionCard wageType="CUSTOM" customWageRate={editCustomWageRate} />
+
+                <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-3 text-xs text-amber-900 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editHasCustomAccess}
+                      onChange={(e) => setEditHasCustomAccess(e.target.checked)}
+                      className="rounded text-amber-600 focus:ring-amber-500 h-4 w-4"
+                    />
+                    <span className="text-xs font-bold text-amber-950">
+                      Grant Custom Wage Access (Enable machine &amp; hour inputs on Worker Page)
+                    </span>
+                  </label>
+                  <p className="text-[11px] text-amber-700 leading-relaxed">
+                    Worker logs their operated machine count and total working hours directly on their worker page.
+                  </p>
+                </div>
               </div>
             )}
           </div>

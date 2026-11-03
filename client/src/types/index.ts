@@ -22,6 +22,7 @@ export interface User {
   phone?: string | null;
   role: RoleType;
   dailyWage?: number | null;
+  customWageRate?: number | null;
   wageType?: 'FIXED' | 'CUSTOM';
   hasCustomWageAccess?: boolean;
   isActive: boolean;
@@ -114,6 +115,7 @@ export interface WorkerTodayStatus {
     wageType: 'FIXED' | 'CUSTOM';
     hasCustomWageAccess: boolean;
     dailyWage?: number | null;
+    customWageRate?: number | null;
   };
   shift?: {
     name: string;

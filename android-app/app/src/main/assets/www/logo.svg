@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="50%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#090d16" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24" />
+      <stop offset="50%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+    <linearGradient id="tealGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2dd4bf" />
+      <stop offset="100%" stop-color="#0f766e" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+  </defs>
+
+  <!-- Background Squircle -->
+  <rect x="24" y="24" width="464" height="464" rx="100" fill="url(#bgGrad)" stroke="url(#goldGrad)" stroke-width="8" filter="url(#shadow)" />
+
+  <!-- Subtle Textile Weave Grid Lines -->
+  <g opacity="0.12" stroke="#fbbf24" stroke-width="2">
+    <line x1="120" y1="80" x2="120" y2="432" />
+    <line x1="180" y1="80" x2="180" y2="432" />
+    <line x1="256" y1="80" x2="256" y2="432" />
+    <line x1="332" y1="80" x2="332" y2="432" />
+    <line x1="392" y1="80" x2="392" y2="432" />
+    <line x1="80" y1="140" x2="432" y2="140" />
+    <line x1="80" y1="200" x2="432" y2="200" />
+    <line x1="80" y1="256" x2="432" y2="256" />
+    <line x1="80" y1="312" x2="432" y2="312" />
+    <line x1="80" y1="372" x2="432" y2="372" />
+  </g>
+
+  <!-- Golden Fabric Weave Ribbon Accent at Top -->
+  <path d="M156 120 C 210 100, 302 100, 356 120 C 370 124, 370 140, 356 144 C 302 164, 210 164, 156 144 C 142 140, 142 124, 156 120 Z" fill="url(#goldGrad)" opacity="0.9" />
+
+  <!-- Prominent Bold Monogram: SSF -->
+  <text x="256" y="295" font-family="'Inter', 'Arial Black', sans-serif" font-weight="900" font-size="142" letter-spacing="6" text-anchor="middle" fill="url(#goldGrad)" filter="url(#glow)">SSF</text>
+
+  <!-- Textile Shuttle Decorative Divider -->
+  <g transform="translate(156, 326)">
+    <line x1="0" y1="6" x2="70" y2="6" stroke="#fbbf24" stroke-width="3" stroke-linecap="round" />
+    <polygon points="100,0 112,6 100,12 88,6" fill="#fbbf24" />
+    <line x1="130" y1="6" x2="200" y2="6" stroke="#fbbf24" stroke-width="3" stroke-linecap="round" />
+  </g>
+
+  <!-- Tagline: FABRIC -->
+  <text x="256" y="380" font-family="'Inter', sans-serif" font-weight="800" font-size="28" letter-spacing="14" text-anchor="middle" fill="#f8fafc">FABRIC</text>
+
+  <!-- Subtitle: SHREE SWAMI SAMARTH -->
+  <text x="256" y="415" font-family="'Inter', sans-serif" font-weight="600" font-size="16" letter-spacing="3" text-anchor="middle" fill="#2dd4bf">SHREE SWAMI SAMARTH</text>
+</svg>

@@ -318,8 +318,21 @@ export async function getMonthlyAttendanceReport(refDateStr?: string, department
     const totalWorkingHours = Number((totalMinutes / 60).toFixed(2));
     const totalOvertimeHours = Number((totalOvertimeMinutes / 60).toFixed(2));
     const isCustom = w.wageType === 'CUSTOM';
+    const customRate = w.customWageRate || 0;
     const dailyWage = isCustom ? 0 : (w.dailyWage || 0);
-    const estimatedPayout = isCustom ? 0 : Math.round(daysPresent * dailyWage);
+
+    let customEarnings = 0;
+    if (isCustom && customRate > 0) {
+      customEarnings = w.attendanceRecords.reduce((sum: number, r: any) => {
+        const m = r.machinesOperated ?? (r.workingMinutes > 0 ? 1 : 0);
+        const h = r.hoursOperated ?? (r.workingMinutes / 60);
+        return sum + (m * h * customRate);
+      }, 0);
+    }
+
+    const estimatedPayout = isCustom
+      ? Math.round(customEarnings)
+      : Math.round(daysPresent * dailyWage);
 
     return {
       userId: w.id,
@@ -331,6 +344,7 @@ export async function getMonthlyAttendanceReport(refDateStr?: string, department
       wageType: w.wageType || 'FIXED',
       hasCustomWageAccess: Boolean(w.hasCustomWageAccess),
       dailyWage: isCustom ? null : w.dailyWage,
+      customWageRate: isCustom ? w.customWageRate : null,
       machinesOperated: totalMachinesOperated > 0 ? totalMachinesOperated : null,
       hoursOperated: totalCustomHoursOperated > 0 ? Number(totalCustomHoursOperated.toFixed(1)) : null,
       daysInMonth: month.totalDays,
@@ -430,8 +444,21 @@ export async function getYearlyAttendanceReport(yearRef?: number | string, depar
 
     const totalWorkingHours = Number((totalMinutes / 60).toFixed(2));
     const totalOvertimeHours = Number((totalOvertimeMinutes / 60).toFixed(2));
-    const dailyWage = w.dailyWage || 0;
-    const estimatedPayout = Math.round(daysPresent * dailyWage);
+    const isCustom = w.wageType === 'CUSTOM';
+    const customRate = w.customWageRate || 0;
+    const dailyWage = isCustom ? 0 : (w.dailyWage || 0);
+
+    let customEarnings = 0;
+    if (isCustom && customRate > 0) {
+      customEarnings = w.attendanceRecords.reduce((sum: number, r: any) => {
+        const m = r.machinesOperated ?? (r.workingMinutes > 0 ? 1 : 0);
+        const h = r.hoursOperated ?? (r.workingMinutes / 60);
+        return sum + (m * h * customRate);
+      }, 0);
+    }
+    const estimatedPayout = isCustom
+      ? Math.round(customEarnings)
+      : Math.round(daysPresent * dailyWage);
 
     return {
       userId: w.id,
@@ -440,7 +467,9 @@ export async function getYearlyAttendanceReport(yearRef?: number | string, depar
       phone: w.phone,
       department: w.department?.name || 'Unassigned',
       shift: w.workerShifts[0]?.shift?.name || 'General Shift',
-      dailyWage: w.dailyWage,
+      wageType: w.wageType || 'FIXED',
+      dailyWage: isCustom ? null : w.dailyWage,
+      customWageRate: isCustom ? w.customWageRate : null,
       daysPresent,
       daysLate,
       totalWorkingHours,

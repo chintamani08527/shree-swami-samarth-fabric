@@ -8,9 +8,9 @@ interface LogoProps {
 
 export const Logo: React.FC<LogoProps> = ({ size = 'md', showSubtitle = true, light = false }) => {
   const iconSizes = {
-    sm: 'w-7 h-7',
-    md: 'w-9 h-9',
-    lg: 'w-12 h-12',
+    sm: 'w-8 h-8',
+    md: 'w-10 h-10',
+    lg: 'w-14 h-14',
   };
 
   const titleSizes = {
@@ -21,31 +21,25 @@ export const Logo: React.FC<LogoProps> = ({ size = 'md', showSubtitle = true, li
 
   return (
     <div className="flex items-center gap-3">
-      {/* Textile Weave / Loom Shuttle Icon */}
+      {/* SSF Monogram Emblem Badge */}
       <div
         className={`${iconSizes[size]} rounded-xl flex items-center justify-center shrink-0 shadow-md ${
           light
-            ? 'bg-white text-navy-900 ring-2 ring-white/20'
-            : 'bg-gradient-to-br from-navy-900 via-navy-800 to-teal-800 text-white shadow-navy-900/20'
-        }`}
+            ? 'bg-slate-900 border border-amber-400/40 shadow-amber-500/10'
+            : 'bg-slate-950 border border-amber-500/30 shadow-slate-900/40'
+        } relative overflow-hidden`}
       >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="w-3/5 h-3/5"
-        >
-          {/* Weaving warp and weft textile pattern */}
-          <path d="M3 6h18" />
-          <path d="M3 12h18" />
-          <path d="M3 18h18" />
-          <path d="M6 3v18" />
-          <path d="M12 3v18" />
-          <path d="M18 3v18" />
-        </svg>
+        {/* Subtle internal gold gradient border */}
+        <div className="absolute inset-0 bg-gradient-to-br from-amber-500/20 via-transparent to-teal-500/20 pointer-events-none" />
+        
+        <div className="flex flex-col items-center justify-center leading-none">
+          <span className="font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500 font-mono text-[11px] sm:text-[13px]">
+            SSF
+          </span>
+          <span className="text-[6px] tracking-widest text-teal-400 font-bold uppercase mt-[-1px]">
+            FABRIC
+          </span>
+        </div>
       </div>
 
       <div className="flex flex-col">
@@ -58,8 +52,8 @@ export const Logo: React.FC<LogoProps> = ({ size = 'md', showSubtitle = true, li
         </span>
         {showSubtitle && (
           <span
-            className={`text-[10px] sm:text-xs font-medium tracking-wide mt-1 uppercase ${
-              light ? 'text-teal-200' : 'text-teal-700'
+            className={`text-[10px] sm:text-xs font-semibold tracking-wide mt-1 uppercase ${
+              light ? 'text-teal-300' : 'text-teal-700'
             }`}
           >
             Smart Attendance Management

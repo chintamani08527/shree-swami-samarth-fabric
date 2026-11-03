@@ -69,6 +69,7 @@ export async function listWorkers(params: {
     role: u.role,
     wageType: u.wageType || 'FIXED',
     dailyWage: u.dailyWage,
+    customWageRate: u.customWageRate,
     hasCustomWageAccess: Boolean(u.hasCustomWageAccess),
     isActive: u.isActive,
     department: u.department ? { id: u.department.id, name: u.department.name } : null,
@@ -118,6 +119,7 @@ export async function getWorkerById(id: string) {
     role: user.role,
     wageType: user.wageType || 'FIXED',
     dailyWage: user.dailyWage,
+    customWageRate: user.customWageRate,
     hasCustomWageAccess: Boolean(user.hasCustomWageAccess),
     isActive: user.isActive,
     department: user.department,
@@ -138,6 +140,7 @@ export async function createWorker(
     shiftId?: string;
     wageType?: 'FIXED' | 'CUSTOM';
     dailyWage?: number | null;
+    customWageRate?: number | null;
     hasCustomWageAccess?: boolean;
     joiningDate?: string;
   },
@@ -168,6 +171,7 @@ export async function createWorker(
       role: data.role || Roles.WORKER,
       wageType: isCustom ? 'CUSTOM' : 'FIXED',
       dailyWage: isCustom ? null : (data.dailyWage !== undefined && data.dailyWage !== null ? Number(data.dailyWage) : null),
+      customWageRate: isCustom ? (data.customWageRate !== undefined && data.customWageRate !== null ? Number(data.customWageRate) : null) : null,
       hasCustomWageAccess,
       departmentId: data.departmentId || null,
       isActive: true,
@@ -210,6 +214,7 @@ export async function updateWorker(
     shiftId?: string;
     wageType?: 'FIXED' | 'CUSTOM';
     dailyWage?: number | null;
+    customWageRate?: number | null;
     hasCustomWageAccess?: boolean;
     isActive?: boolean;
     joiningDate?: string;
@@ -238,6 +243,11 @@ export async function updateWorker(
         ? { dailyWage: null }
         : data.dailyWage !== undefined
         ? { dailyWage: data.dailyWage !== null ? Number(data.dailyWage) : null }
+        : {}),
+      ...(data.wageType === 'FIXED'
+        ? { customWageRate: null }
+        : data.customWageRate !== undefined
+        ? { customWageRate: data.customWageRate !== null ? Number(data.customWageRate) : null }
         : {}),
       ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
       ...(data.joiningDate ? { joiningDate: new Date(data.joiningDate) } : {}),

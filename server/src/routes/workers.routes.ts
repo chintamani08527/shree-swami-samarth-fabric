@@ -29,6 +29,7 @@ const createWorkerSchema = z.object({
     shiftId: z.string().optional(),
     wageType: z.enum(['FIXED', 'CUSTOM']).optional(),
     dailyWage: z.number().nullable().optional(),
+    customWageRate: z.number().nullable().optional(),
     hasCustomWageAccess: z.boolean().optional(),
     joiningDate: z.string().optional(),
   }),

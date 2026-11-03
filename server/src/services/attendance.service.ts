@@ -467,6 +467,8 @@ export async function getWorkerStatus(userId: string) {
     worker: {
       wageType: user.wageType || 'FIXED',
       hasCustomWageAccess: Boolean(user.hasCustomWageAccess || user.wageType === 'CUSTOM'),
+      dailyWage: user.dailyWage,
+      customWageRate: user.customWageRate,
     },
     shift: shift ? {
       name: todayRecord?.shiftType === 'NIGHT' ? 'Night Shift (8:00 PM - 8:00 AM)' : (shift.name || 'Day Shift (8:00 AM - 8:00 PM)'),

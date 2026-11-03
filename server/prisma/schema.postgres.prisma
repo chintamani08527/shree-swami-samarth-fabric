@@ -19,6 +19,7 @@ model User {
   role                String             @default("WORKER") // ADMIN, SUPERVISOR, WORKER
   wageType            String             @default("FIXED") // FIXED or CUSTOM
   dailyWage           Float? // Fixed Daily wage or pay rate (₹)
+  customWageRate      Float? // Custom Wage Rate for 1 machine per 1 hour (₹)
   hasCustomWageAccess Boolean            @default(false) // Custom wage entry access granted by admin
   isActive            Boolean            @default(true)
   joiningDate         DateTime           @default(now())

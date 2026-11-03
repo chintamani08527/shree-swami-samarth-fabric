@@ -40,6 +40,7 @@ export const WorkerDashboard: React.FC = () => {
   // Custom wage & machine logging state
   const [customWageModalOpen, setCustomWageModalOpen] = useState(false);
   const [checkOutPromptOpen, setCheckOutPromptOpen] = useState(false);
+  const [hasOvertime, setHasOvertime] = useState(false);
   const [machinesOperated, setMachinesOperated] = useState<string>('');
   const [hoursOperated, setHoursOperated] = useState<string>('');
   const [customWorkRemarks, setCustomWorkRemarks] = useState<string>('');
@@ -145,19 +146,18 @@ export const WorkerDashboard: React.FC = () => {
 
   // Check Out initiator
   const handleInitiateCheckOut = () => {
-    if (hasCustomWageAccess) {
-      // Pre-fill hours operated with live duration if not filled
-      if (!hoursOperated && activeTimerSeconds > 0) {
-        const liveHrs = (activeTimerSeconds / 3600).toFixed(1);
-        setHoursOperated(liveHrs);
-      }
-      setCheckOutPromptOpen(true);
-    } else {
-      handleDirectCheckOut();
+    // Pre-fill hours operated with live duration if not filled
+    if (!hoursOperated && activeTimerSeconds > 0) {
+      const liveHrs = (activeTimerSeconds / 3600).toFixed(1);
+      setHoursOperated(liveHrs);
     }
+    if (hasCustomWageAccess || machinesOperated) {
+      setHasOvertime(true);
+    }
+    setCheckOutPromptOpen(true);
   };
 
-  // Direct Check Out handler (fixed wage or supervisor)
+  // Direct Check Out handler (fallback)
   const handleDirectCheckOut = async () => {
     try {
       setActionLoading(true);
@@ -173,14 +173,15 @@ export const WorkerDashboard: React.FC = () => {
     }
   };
 
-  // Check Out with Custom Wage Machines & Hours
+  // Check Out with Overtime / Custom Wage Machines & Hours
   const handleConfirmCheckOutWithCustomDetails = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setActionLoading(true);
+      const isLoggingWork = hasOvertime || hasCustomWageAccess;
       const res = await attendanceApi.checkOut({
-        machinesOperated: machinesOperated ? parseInt(machinesOperated, 10) : undefined,
-        hoursOperated: hoursOperated ? parseFloat(hoursOperated) : undefined,
+        machinesOperated: isLoggingWork && machinesOperated ? parseInt(machinesOperated, 10) : undefined,
+        hoursOperated: isLoggingWork && hoursOperated ? parseFloat(hoursOperated) : undefined,
       });
       if (res.success) {
         showToast(res.message, 'success');
@@ -842,49 +843,96 @@ export const WorkerDashboard: React.FC = () => {
         </form>
       </Modal>
 
-      {/* CHECK OUT CONFIRMATION MODAL WITH CUSTOM DETAILS */}
+      {/* CHECK OUT CONFIRMATION MODAL WITH OVERTIME & MACHINE LOG */}
       <Modal
         isOpen={checkOutPromptOpen}
         onClose={() => setCheckOutPromptOpen(false)}
-        title="Shift Check-Out & Work Log"
-        subtitle="Confirm your operated machines and hours before completing shift"
+        title="Shift Check-Out & Summary"
+        subtitle="Confirm shift completion and record overtime or operated machines"
         maxWidth="md"
       >
         <form onSubmit={handleConfirmCheckOutWithCustomDetails} className="space-y-4">
-          <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900">
-            Please verify your machine count and hours operated so your wage payout is calculated accurately.
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+            <div>
+              <span className="text-slate-500 font-medium">Shift Start:</span>{' '}
+              <strong className="text-navy-950 font-mono">{statusData?.today.formattedCheckInTime || '--'}</strong>
+            </div>
+            <div>
+              <span className="text-slate-500 font-medium">Shift Type:</span>{' '}
+              <span className="font-bold text-teal-700">{statusData?.today.shiftType === 'NIGHT' ? '🌙 Night Shift' : '☀️ Day Shift'}</span>
+            </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              How Many Machines Operated? *
-            </label>
-            <input
-              type="number"
-              min="0"
-              required
-              placeholder="e.g. 4"
-              value={machinesOperated}
-              onChange={(e) => setMachinesOperated(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-amber-500"
-            />
-          </div>
+          {/* OVERTIME / MACHINE SECTION */}
+          <div className="p-3.5 bg-amber-50/80 rounded-xl border border-amber-200 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={hasOvertime || hasCustomWageAccess}
+                  onChange={(e) => setHasOvertime(e.target.checked)}
+                  className="rounded text-amber-600 focus:ring-amber-500 h-4 w-4"
+                />
+                <span className="text-xs font-bold text-amber-950">
+                  Overtime / Machine Operations Section
+                </span>
+              </label>
+              {(hasOvertime || hasCustomWageAccess) && (
+                <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded border border-amber-200">
+                  Overtime / Machines Active
+                </span>
+              )}
+            </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              How Many Hours Operated? *
-            </label>
-            <input
-              type="number"
-              step="0.1"
-              min="0"
-              required
-              placeholder="e.g. 8.5"
-              value={hoursOperated}
-              onChange={(e) => setHoursOperated(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-amber-500"
-            />
-            <span className="text-[10px] text-slate-400">Pre-calculated from your shift timer. Adjust if needed.</span>
+            {(hasOvertime || hasCustomWageAccess) ? (
+              <div className="space-y-3 pt-1">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    How Many Machines Operated? *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    placeholder="e.g. 2 (Number of machines)"
+                    value={machinesOperated}
+                    onChange={(e) => setMachinesOperated(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-amber-500"
+                  />
+                  <span className="text-[10px] text-slate-500">Number of machines operated during shift or overtime</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    How Many Hours Operated? *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    required
+                    placeholder="e.g. 8.5 (Hours operated)"
+                    value={hoursOperated}
+                    onChange={(e) => setHoursOperated(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-amber-500"
+                  />
+                  <span className="text-[10px] text-slate-400">Pre-calculated from your shift timer. Adjust if needed.</span>
+                </div>
+
+                {statusData?.worker?.customWageRate && machinesOperated && hoursOperated && (
+                  <div className="p-2.5 bg-slate-900 text-white rounded-lg flex items-center justify-between text-xs">
+                    <span className="text-slate-300">Projected Wage (@ ₹{statusData.worker.customWageRate}/mc/hr):</span>
+                    <strong className="text-amber-400 font-mono text-sm">
+                      ₹{Math.round(parseInt(machinesOperated, 10) * parseFloat(hoursOperated) * statusData.worker.customWageRate).toLocaleString('en-IN')}
+                    </strong>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-[11px] text-amber-800 leading-relaxed">
+                Check the box above if you worked overtime or operated machines to report machine counts and hours.
+              </p>
+            )}
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
@@ -898,7 +946,7 @@ export const WorkerDashboard: React.FC = () => {
             <button
               type="submit"
               disabled={actionLoading}
-              className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white rounded-xl text-xs font-bold shadow-md transition-colors disabled:opacity-50 flex items-center gap-1.5"
+              className="px-5 py-2.5 bg-gradient-to-r from-teal-600 to-navy-900 hover:from-teal-700 hover:to-navy-950 text-white rounded-xl text-xs font-bold shadow-md transition-colors disabled:opacity-50 flex items-center gap-1.5"
             >
               <LogOut className="w-4 h-4" />
               <span>{actionLoading ? 'Recording Check-Out...' : 'Confirm & Check Out'}</span>
