@@ -13,6 +13,7 @@ export const config = {
 };
 
 export const Roles = {
+  SUPER_ADMIN: 'SUPER_ADMIN',
   ADMIN: 'ADMIN',
   SUPERVISOR: 'SUPERVISOR',
   WORKER: 'WORKER',

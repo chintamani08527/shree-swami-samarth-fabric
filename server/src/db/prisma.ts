@@ -89,7 +89,7 @@ export async function ensureDatabaseReady() {
       console.log('✅ Created default Company Settings.');
     }
 
-    // Ensure Owner Vinayak Ginde exists
+    // Ensure Owner Vinayak Ginde exists as SUPER_ADMIN
     const vinayak = await prisma.user.findFirst({
       where: { workerId: 'VINAYAK4501' },
     });
@@ -101,12 +101,18 @@ export async function ensureDatabaseReady() {
           name: 'Vinayak Ginde',
           phone: '+91 98220 45010',
           passwordHash: hash,
-          role: 'ADMIN',
+          role: 'SUPER_ADMIN',
           dailyWage: null,
           isActive: true,
         },
       });
-      console.log('✅ Created Owner Vinayak Ginde account.');
+      console.log('✅ Created Super Admin Vinayak Ginde account.');
+    } else if (vinayak.role !== 'SUPER_ADMIN') {
+      await prisma.user.update({
+        where: { id: vinayak.id },
+        data: { role: 'SUPER_ADMIN' },
+      });
+      console.log('✅ Updated Vinayak Ginde to SUPER_ADMIN.');
     }
 
     // Ensure default shifts exist

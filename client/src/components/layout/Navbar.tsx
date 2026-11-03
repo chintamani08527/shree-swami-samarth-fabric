@@ -42,7 +42,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, showSidebarTogg
                   </span>
                   <div className="flex items-center justify-end gap-1 mt-0.5">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800 bg-teal-50 px-1.5 py-0.2 rounded-md border border-teal-200/60">
-                      {user.role === 'ADMIN' ? 'Owner' : user.role}
+                      {user.role === 'SUPER_ADMIN' ? 'Super Admin' : user.role === 'ADMIN' ? 'Admin' : user.role}
                     </span>
                     <span className="text-[10px] text-slate-600 font-mono">
                       {user.workerId}

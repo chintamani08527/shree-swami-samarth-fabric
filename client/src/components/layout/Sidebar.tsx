@@ -7,6 +7,7 @@ import {
   Building2,
   ScrollText,
   Sliders,
+  ShieldCheck,
   LogOut,
   X,
 } from 'lucide-react';
@@ -27,7 +28,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onClose,
 }) => {
   const { user, logout } = useAuth();
-  const isAdmin = user?.role === 'ADMIN';
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN' || user?.workerId === 'VINAYAK4501';
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -35,6 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'workers', label: 'Workers', icon: Users },
     { id: 'reports', label: 'Reports & Excel Export', icon: FileSpreadsheet },
     ...(isAdmin ? [{ id: 'departments', label: 'Departments', icon: Building2 }] : []),
+    ...(isSuperAdmin ? [{ id: 'admins', label: 'Admin Management', icon: ShieldCheck }] : []),
     ...(isAdmin ? [{ id: 'audit', label: 'Audit Logs', icon: ScrollText }] : []),
     ...(isAdmin ? [{ id: 'settings', label: 'Settings', icon: Sliders }] : []),
   ];
@@ -102,7 +105,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-white truncate">{user?.name}</p>
               <p className="text-[11px] text-teal-400 font-mono truncate">
-                {user?.workerId} • {user?.role === 'ADMIN' ? 'Owner' : user?.role}
+                {user?.workerId} • {user?.role === 'SUPER_ADMIN' ? 'Super Admin' : user?.role === 'ADMIN' ? 'Admin' : user?.role}
               </p>
             </div>
           </div>

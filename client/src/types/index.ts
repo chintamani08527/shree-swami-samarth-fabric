@@ -1,4 +1,4 @@
-export type RoleType = 'ADMIN' | 'SUPERVISOR' | 'WORKER';
+export type RoleType = 'SUPER_ADMIN' | 'ADMIN' | 'SUPERVISOR' | 'WORKER';
 
 export type AttendanceStatusType =
   | 'PRESENT'

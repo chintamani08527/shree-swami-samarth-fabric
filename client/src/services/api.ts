@@ -399,3 +399,32 @@ export const auditApi = {
     return request<{ success: boolean; data: any }>(`/audit-logs?${searchParams.toString()}`);
   },
 };
+
+// 8. Admins API (Super Admin Management)
+export const adminsApi = {
+  list: () =>
+    request<{ success: boolean; data: any[] }>('/admins'),
+
+  create: (data: { workerId: string; name: string; phone?: string; pin: string }) =>
+    request<{ success: boolean; message: string; data: any }>('/admins', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  toggleStatus: (id: string, isActive: boolean) =>
+    request<{ success: boolean; message: string; data: any }>(`/admins/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ isActive }),
+    }),
+
+  resetPin: (id: string, newPin: string) =>
+    request<{ success: boolean; message: string }>(`/admins/${id}/reset-pin`, {
+      method: 'POST',
+      body: JSON.stringify({ newPin }),
+    }),
+
+  delete: (id: string) =>
+    request<{ success: boolean; message: string }>(`/admins/${id}`, {
+      method: 'DELETE',
+    }),
+};

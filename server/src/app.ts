@@ -14,6 +14,7 @@ import reportsRoutes from './routes/reports.routes.js';
 import departmentsRoutes from './routes/departments.routes.js';
 import settingsRoutes from './routes/settings.routes.js';
 import auditRoutes from './routes/audit.routes.js';
+import adminsRoutes from './routes/admins.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,6 +66,7 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/departments', departmentsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/audit-logs', auditRoutes);
+app.use('/api/admins', adminsRoutes);
 
 // In production, serve the built frontend assets
 const clientDistPath = path.resolve(__dirname, '../../client/dist');

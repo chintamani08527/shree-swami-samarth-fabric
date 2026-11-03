@@ -20,5 +20,6 @@ export function authorize(...allowedRoles: RoleType[]) {
   };
 }
 
-export const requireAdmin = authorize(Roles.ADMIN);
-export const requireSupervisorOrAdmin = authorize(Roles.ADMIN, Roles.SUPERVISOR);
+export const requireAdmin = authorize(Roles.SUPER_ADMIN, Roles.ADMIN);
+export const requireSuperAdmin = authorize(Roles.SUPER_ADMIN);
+export const requireSupervisorOrAdmin = authorize(Roles.SUPER_ADMIN, Roles.ADMIN, Roles.SUPERVISOR);

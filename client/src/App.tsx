@@ -10,6 +10,7 @@ import { ReportsPage } from './pages/admin/ReportsPage.tsx';
 import { DepartmentManagement } from './pages/admin/DepartmentManagement.tsx';
 import { SettingsPage } from './pages/admin/SettingsPage.tsx';
 import { AuditLogsPage } from './pages/admin/AuditLogsPage.tsx';
+import { AdminManagement } from './pages/admin/AdminManagement.tsx';
 import { SupervisorDashboard } from './pages/supervisor/SupervisorDashboard.tsx';
 import { Logo } from './components/common/Logo.tsx';
 
@@ -64,6 +65,7 @@ export const AppContent: React.FC = () => {
       {adminTab === 'workers' && <WorkerManagement />}
       {adminTab === 'reports' && <ReportsPage />}
       {adminTab === 'departments' && <DepartmentManagement />}
+      {adminTab === 'admins' && <AdminManagement />}
       {adminTab === 'settings' && <SettingsPage />}
       {adminTab === 'audit' && <AuditLogsPage />}
     </Layout>
