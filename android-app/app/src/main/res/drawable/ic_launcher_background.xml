@@ -14,15 +14,10 @@
                 android:endX="108"
                 android:endY="108"
                 android:type="linear">
-                <item android:color="#FF0F172A" android:offset="0.0" />
-                <item android:color="#FF1E293B" android:offset="0.5" />
-                <item android:color="#FF090D16" android:offset="1.0" />
+                <item android:color="#FF0A192F" android:offset="0.0" />
+                <item android:color="#FF1B3A5D" android:offset="0.5" />
+                <item android:color="#FF0F766E" android:offset="1.0" />
             </gradient>
         </aapt:attr>
     </path>
-    <!-- Subtle textile golden grid lines -->
-    <path
-        android:pathData="M24,18 L24,90 M40,18 L40,90 M54,18 L54,90 M68,18 L68,90 M84,18 L84,90 M18,28 L90,28 M18,44 L90,44 M18,54 L90,54 M18,64 L90,64 M18,80 L90,80"
-        android:strokeWidth="0.5"
-        android:strokeColor="#20F59E0B" />
 </vector>
