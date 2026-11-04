@@ -152,6 +152,35 @@ export const attendanceApi = {
     }),
 };
 
+// 2b. Overtime Approval API
+export const overtimeApi = {
+  list: (params: { status?: string; startDate?: string; endDate?: string } = {}) => {
+    const searchParams = new URLSearchParams();
+    if (params.status) searchParams.append('status', params.status);
+    if (params.startDate) searchParams.append('startDate', params.startDate);
+    if (params.endDate) searchParams.append('endDate', params.endDate);
+    const qs = searchParams.toString();
+    return request<{ success: boolean; data: any }>(`/attendance/overtime/list${qs ? `?${qs}` : ''}`);
+  },
+
+  approve: (id: string) =>
+    request<{ success: boolean; message: string; data: any }>(`/attendance/overtime/${id}/approve`, {
+      method: 'POST',
+    }),
+
+  reject: (id: string, reason?: string) =>
+    request<{ success: boolean; message: string; data: any }>(`/attendance/overtime/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+
+  bulkApprove: (recordIds: string[]) =>
+    request<{ success: boolean; message: string; count: number }>('/attendance/overtime/bulk-approve', {
+      method: 'POST',
+      body: JSON.stringify({ recordIds }),
+    }),
+};
+
 // 3. Workers API
 export const workersApi = {
   list: (params: Record<string, any> = {}) => {

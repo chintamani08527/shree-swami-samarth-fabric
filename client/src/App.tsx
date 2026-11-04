@@ -11,6 +11,7 @@ import { DepartmentManagement } from './pages/admin/DepartmentManagement.tsx';
 import { SettingsPage } from './pages/admin/SettingsPage.tsx';
 import { AuditLogsPage } from './pages/admin/AuditLogsPage.tsx';
 import { AdminManagement } from './pages/admin/AdminManagement.tsx';
+import { OvertimeApprovalsPage } from './pages/admin/OvertimeApprovalsPage.tsx';
 import { SupervisorDashboard } from './pages/supervisor/SupervisorDashboard.tsx';
 import { Logo } from './components/common/Logo.tsx';
 
@@ -48,6 +49,8 @@ export const AppContent: React.FC = () => {
           <ReportsPage />
         ) : adminTab === 'attendance' ? (
           <AttendanceMonitoring />
+        ) : adminTab === 'overtime' ? (
+          <OvertimeApprovalsPage />
         ) : adminTab === 'workers' ? (
           <WorkerManagement />
         ) : (
@@ -62,6 +65,7 @@ export const AppContent: React.FC = () => {
     <Layout currentTab={adminTab} onSelectTab={setAdminTab}>
       {adminTab === 'dashboard' && <AdminDashboard onNavigateTab={setAdminTab} />}
       {adminTab === 'attendance' && <AttendanceMonitoring />}
+      {adminTab === 'overtime' && <OvertimeApprovalsPage />}
       {adminTab === 'workers' && <WorkerManagement />}
       {adminTab === 'reports' && <ReportsPage />}
       {adminTab === 'departments' && <DepartmentManagement />}

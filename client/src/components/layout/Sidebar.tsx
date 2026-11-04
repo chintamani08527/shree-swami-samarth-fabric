@@ -8,6 +8,7 @@ import {
   ScrollText,
   Sliders,
   ShieldCheck,
+  Clock,
   LogOut,
   X,
 } from 'lucide-react';
@@ -34,6 +35,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'attendance', label: 'Attendance Monitoring', icon: CheckCircle },
+    { id: 'overtime', label: 'Overtime Approvals', icon: Clock },
     { id: 'workers', label: 'Workers', icon: Users },
     { id: 'reports', label: 'Reports & Excel Export', icon: FileSpreadsheet },
     ...(isAdmin ? [{ id: 'departments', label: 'Departments', icon: Building2 }] : []),

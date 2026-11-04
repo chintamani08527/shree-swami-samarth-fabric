@@ -18,6 +18,7 @@ import {
   User as UserIcon,
   Sparkles,
   Zap,
+  XCircle,
 } from 'lucide-react';
 import { Logo } from '../../components/common/Logo.tsx';
 import { LiveClock } from '../../components/common/LiveClock.tsx';
@@ -883,11 +884,25 @@ export const WorkerDashboard: React.FC = () => {
                     <Timer className="w-4 h-4" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-bold text-navy-950 flex items-center gap-1.5">
+                    <h2 className="text-sm font-bold text-navy-950 flex items-center gap-1.5 flex-wrap">
                       <span>Overtime Portal</span>
-                      <span className="text-[10px] bg-orange-100 text-orange-800 px-1.5 py-0.5 rounded font-bold uppercase">
-                        OT Hub
-                      </span>
+                      {statusData?.today.overtimeStatus === 'APPROVED' ? (
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold uppercase flex items-center gap-0.5">
+                          ✓ Approved
+                        </span>
+                      ) : statusData?.today.overtimeStatus === 'REJECTED' ? (
+                        <span className="text-[10px] bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded font-bold uppercase">
+                          ✗ Rejected
+                        </span>
+                      ) : (statusData?.today.overtimeHours || Number(statusData?.today.overtimeMachines || 0) > 0) ? (
+                        <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold uppercase animate-pulse">
+                          ⏳ Approval Pending
+                        </span>
+                      ) : (
+                        <span className="text-[10px] bg-orange-100 text-orange-800 px-1.5 py-0.5 rounded font-bold uppercase">
+                          OT Hub
+                        </span>
+                      )}
                     </h2>
                     <p className="text-xs text-slate-500">Log extra machines &amp; overtime hours</p>
                   </div>
@@ -1043,10 +1058,20 @@ export const WorkerDashboard: React.FC = () => {
                   <h3 className="text-sm font-bold text-navy-950">Today's Recorded Overtime</h3>
                   <p className="text-xs text-slate-500">{statusData?.today.formattedDate || 'Today'}</p>
                 </div>
-                {statusData?.today.overtimeHours ? (
+                {statusData?.today.overtimeStatus === 'APPROVED' ? (
                   <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    OT Recorded
+                    Approved / मंजूर
+                  </span>
+                ) : statusData?.today.overtimeStatus === 'REJECTED' ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-200" title={statusData.today.overtimeRejectionReason || undefined}>
+                    <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                    Rejected / नाकारले
+                  </span>
+                ) : (statusData?.today.overtimeHours || Number(statusData?.today.overtimeMachines || 0) > 0) ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-300 animate-pulse">
+                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                    Pending Approval / मंजुरी बाकी
                   </span>
                 ) : (
                   <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
@@ -1753,14 +1778,20 @@ export const WorkerDashboard: React.FC = () => {
                 </div>
 
                 {celebrationEarnings.overtimeEarned > 0 && (
-                  <div className="flex items-center justify-between text-xs sm:text-sm">
-                    <span className="text-amber-700 font-medium flex items-center gap-1">
-                      <Zap className="w-3.5 h-3.5 text-amber-500" />
-                      <span>Overtime Pay ({celebrationEarnings.overtimeHours}h):</span>
-                    </span>
-                    <span className="font-extrabold text-amber-700">
-                      + ₹ {celebrationEarnings.overtimeEarned.toLocaleString('en-IN')}
-                    </span>
+                  <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200 space-y-1">
+                    <div className="flex items-center justify-between text-xs sm:text-sm">
+                      <span className="text-amber-800 font-semibold flex items-center gap-1">
+                        <Zap className="w-3.5 h-3.5 text-amber-500" />
+                        <span>Overtime ({celebrationEarnings.overtimeHours}h):</span>
+                      </span>
+                      <span className="font-extrabold text-amber-800">
+                        ₹ {celebrationEarnings.overtimeEarned.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-amber-700 font-medium flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-amber-600" />
+                      <span>Sent to Admin for approval (मंजुरी बाकी)</span>
+                    </div>
                   </div>
                 )}
               </div>

@@ -214,6 +214,10 @@ export function calculateShiftEarnings(
     overtimeMachines?: number | null;
     overtimeHours?: number | null;
     overtimeMinutes?: number | null;
+    overtimeStatus?: string | null;
+    overtimeApprovedAt?: Date | null;
+    overtimeApprovedBy?: string | null;
+    overtimeRejectionReason?: string | null;
   },
   workingMinutes: number,
   status: string
@@ -226,14 +230,15 @@ export function calculateShiftEarnings(
   const defaultShiftHours = 12.0;
   const hoursWorked = rawHours > 0 ? rawHours : defaultShiftHours;
 
+  const otM = record.overtimeMachines ?? 0;
+  const otH = record.overtimeHours ?? Number(((record.overtimeMinutes || 0) / 60).toFixed(1));
+
   if (isCustom) {
     const rate = user.customWageRate || 0;
     const m = record.machinesOperated ?? (workingMinutes > 0 ? 1 : 2);
     const h = record.hoursOperated ?? hoursWorked;
     baseEarned = Math.round(m * h * rate);
 
-    const otM = record.overtimeMachines ?? 0;
-    const otH = record.overtimeHours ?? Number(((record.overtimeMinutes || 0) / 60).toFixed(1));
     if (otM > 0 && otH > 0) {
       overtimeEarned = Math.round(otM * otH * rate);
     } else if (otH > 0) {
@@ -241,29 +246,42 @@ export function calculateShiftEarnings(
     }
   } else {
     // Fixed daily wage worker: Full shift pay (e.g. ₹1000)
-    const dailyRate = user.dailyWage || 500;
+    const dailyRate = user.dailyWage || 1000;
     baseEarned = Math.round(dailyRate);
 
-    const otH = record.overtimeHours ?? Number(((record.overtimeMinutes || 0) / 60).toFixed(1));
     if (otH > 0) {
       const hourlyRate = dailyRate / 12; // 12-hour factory shift
       overtimeEarned = Math.round(otH * hourlyRate);
     }
   }
 
-  const totalEarned = Math.max(0, baseEarned + overtimeEarned);
+  // Determine Overtime Approval Status: NONE, PENDING, APPROVED, REJECTED
+  const hasOvertimeData = otH > 0 || otM > 0 || (record.overtimeMinutes || 0) > 0;
+  const overtimeStatus = record.overtimeStatus || (hasOvertimeData ? 'PENDING' : 'NONE');
+  const isOvertimeApproved = overtimeStatus === 'APPROVED';
+
+  // "after approval salery should be added to regular"
+  // If approved: add to regular salary.
+  // If pending or rejected: only regular base pay is in totalEarned.
+  const totalEarned = isOvertimeApproved ? Math.max(0, baseEarned + overtimeEarned) : Math.max(0, baseEarned);
 
   return {
     totalEarned,
     baseEarned,
     overtimeEarned,
+    overtimeStatus,
+    isOvertimeApproved,
+    overtimePendingAmount: isOvertimeApproved ? 0 : overtimeEarned,
+    overtimeApprovedAt: record.overtimeApprovedAt || null,
+    overtimeApprovedBy: record.overtimeApprovedBy || null,
+    overtimeRejectionReason: record.overtimeRejectionReason || null,
     wageType: isCustom ? 'CUSTOM' : 'FIXED',
     customRate: user.customWageRate ? Number(user.customWageRate.toFixed(2)) : 0,
-    dailyWage: user.dailyWage || 500,
+    dailyWage: user.dailyWage || 1000,
     machinesOperated: record.machinesOperated ?? (isCustom ? 1 : 0),
     hoursOperated: record.hoursOperated ?? hoursWorked,
-    overtimeMachines: record.overtimeMachines ?? 0,
-    overtimeHours: record.overtimeHours ?? Number(((record.overtimeMinutes || 0) / 60).toFixed(1)),
+    overtimeMachines: otM,
+    overtimeHours: otH,
     shiftType: record.shiftType || 'DAY',
     status,
   };
@@ -413,6 +431,9 @@ export async function processCheckOut(
       ...(customDetails?.overtimeHours !== undefined && customDetails.overtimeHours !== null
         ? { overtimeHours: Number(customDetails.overtimeHours) }
         : {}),
+      ...(Number(customDetails?.overtimeHours || 0) > 0 || Number(customDetails?.overtimeMachines || 0) > 0
+        ? { overtimeStatus: 'PENDING', overtimeApprovedAt: null, overtimeApprovedBy: null }
+        : {}),
     },
   });
 
@@ -525,6 +546,7 @@ export async function logCustomWageWork(
         hoursOperated: data.hoursOperated !== undefined && data.hoursOperated !== null ? Number(data.hoursOperated) : null,
         overtimeMachines: data.overtimeMachines !== undefined && data.overtimeMachines !== null ? Number(data.overtimeMachines) : null,
         overtimeHours: data.overtimeHours !== undefined && data.overtimeHours !== null ? Number(data.overtimeHours) : null,
+        overtimeStatus: (Number(data.overtimeMachines || 0) > 0 || Number(data.overtimeHours || 0) > 0) ? 'PENDING' : 'NONE',
         remarks: data.remarks || null,
       },
     });
@@ -536,6 +558,9 @@ export async function logCustomWageWork(
         ...(data.hoursOperated !== undefined ? { hoursOperated: data.hoursOperated !== null ? Number(data.hoursOperated) : null } : {}),
         ...(data.overtimeMachines !== undefined ? { overtimeMachines: data.overtimeMachines !== null ? Number(data.overtimeMachines) : null } : {}),
         ...(data.overtimeHours !== undefined ? { overtimeHours: data.overtimeHours !== null ? Number(data.overtimeHours) : null } : {}),
+        ...(Number(data.overtimeMachines || 0) > 0 || Number(data.overtimeHours || 0) > 0
+          ? { overtimeStatus: 'PENDING', overtimeApprovedAt: null, overtimeApprovedBy: null }
+          : {}),
         ...(data.remarks !== undefined ? { remarks: data.remarks } : {}),
       },
     });
@@ -712,6 +737,10 @@ export async function getWorkerStatus(userId: string) {
       hoursOperated: activeRecord?.hoursOperated ?? null,
       overtimeMachines: activeRecord?.overtimeMachines ?? null,
       overtimeHours: activeRecord?.overtimeHours ?? (activeRecord?.overtimeMinutes ? Number((activeRecord.overtimeMinutes / 60).toFixed(1)) : null),
+      overtimeStatus: activeRecord?.overtimeStatus || (activeRecord?.overtimeHours ? 'PENDING' : 'NONE'),
+      overtimeApprovedAt: activeRecord?.overtimeApprovedAt || null,
+      overtimeApprovedBy: activeRecord?.overtimeApprovedBy || null,
+      overtimeRejectionReason: activeRecord?.overtimeRejectionReason || null,
       earnings,
     },
     worker: {
@@ -1098,4 +1127,264 @@ export async function getCurrentlyCheckedInWorkers(departmentId?: string) {
       status: r.status,
     };
   });
+}
+
+/**
+ * Get overtime requests for admin portal review & approval
+ */
+export async function getOvertimeRequests(filter?: {
+  status?: string;
+  startDate?: string;
+  endDate?: string;
+}) {
+  const where: any = {
+    OR: [
+      { overtimeHours: { gt: 0 } },
+      { overtimeMachines: { gt: 0 } },
+      { overtimeMinutes: { gt: 0 } },
+      { overtimeStatus: { in: ['PENDING', 'APPROVED', 'REJECTED'] } },
+    ],
+  };
+
+  if (filter?.status && filter.status !== 'ALL') {
+    where.overtimeStatus = filter.status;
+  }
+
+  if (filter?.startDate || filter?.endDate) {
+    where.attendanceDate = {};
+    if (filter.startDate) where.attendanceDate.gte = filter.startDate;
+    if (filter.endDate) where.attendanceDate.lte = filter.endDate;
+  }
+
+  const records = await prisma.attendanceRecord.findMany({
+    where,
+    include: {
+      user: {
+        select: {
+          id: true,
+          workerId: true,
+          name: true,
+          phone: true,
+          role: true,
+          unit: true,
+          wageType: true,
+          dailyWage: true,
+          customWageRate: true,
+          hasCustomWageAccess: true,
+          department: { select: { id: true, name: true } },
+        },
+      },
+    },
+    orderBy: [{ attendanceDate: 'desc' }, { createdAt: 'desc' }],
+  });
+
+  let totalPendingCount = 0;
+  let totalPendingAmount = 0;
+  let totalApprovedCount = 0;
+  let totalApprovedAmount = 0;
+  let totalRejectedCount = 0;
+
+  const items = records.map((r) => {
+    const isCustom = r.user.wageType === 'CUSTOM' || Boolean(r.user.hasCustomWageAccess);
+    const otM = r.overtimeMachines ?? 0;
+    const otH = r.overtimeHours ?? Number(((r.overtimeMinutes || 0) / 60).toFixed(1));
+    let estimatedOtPay = 0;
+
+    if (isCustom) {
+      const rate = r.user.customWageRate || 0;
+      if (otM > 0 && otH > 0) {
+        estimatedOtPay = Math.round(otM * otH * rate);
+      } else if (otH > 0) {
+        estimatedOtPay = Math.round(otH * rate * (r.machinesOperated || 1));
+      }
+    } else {
+      const dailyRate = r.user.dailyWage || 1000;
+      if (otH > 0) {
+        estimatedOtPay = Math.round(otH * (dailyRate / 12));
+      }
+    }
+
+    const currentStatus = r.overtimeStatus || 'PENDING';
+
+    if (currentStatus === 'PENDING') {
+      totalPendingCount += 1;
+      totalPendingAmount += estimatedOtPay;
+    } else if (currentStatus === 'APPROVED') {
+      totalApprovedCount += 1;
+      totalApprovedAmount += estimatedOtPay;
+    } else if (currentStatus === 'REJECTED') {
+      totalRejectedCount += 1;
+    }
+
+    return {
+      id: r.id,
+      userId: r.userId,
+      workerId: r.workerId,
+      workerName: r.user.name,
+      phone: r.user.phone,
+      departmentName: r.user.department?.name || 'Textile Looms',
+      unit: r.user.unit || 'Unit 1',
+      attendanceDate: r.attendanceDate,
+      shiftType: r.shiftType || 'DAY',
+      checkInAt: r.checkInAt,
+      checkOutAt: r.checkOutAt,
+      checkInTime: formatKolkataTime(r.checkInAt),
+      checkOutTime: formatKolkataTime(r.checkOutAt),
+      workingMinutes: r.workingMinutes,
+      workingHours: Number((r.workingMinutes / 60).toFixed(1)),
+      machinesOperated: r.machinesOperated,
+      hoursOperated: r.hoursOperated,
+      overtimeMachines: otM,
+      overtimeHours: otH,
+      overtimeStatus: currentStatus,
+      overtimeApprovedAt: r.overtimeApprovedAt,
+      overtimeApprovedBy: r.overtimeApprovedBy,
+      overtimeRejectionReason: r.overtimeRejectionReason,
+      estimatedOtPay,
+      wageType: isCustom ? 'CUSTOM' : 'FIXED',
+      customWageRate: r.user.customWageRate,
+      dailyWage: r.user.dailyWage,
+      remarks: r.remarks,
+    };
+  });
+
+  return {
+    items,
+    summary: {
+      totalPendingCount,
+      totalPendingAmount,
+      totalApprovedCount,
+      totalApprovedAmount,
+      totalRejectedCount,
+      totalCount: records.length,
+    },
+  };
+}
+
+/**
+ * Approve worker overtime request
+ */
+export async function approveOvertime(
+  recordId: string,
+  adminActor: { id: string; name: string }
+) {
+  const record = await prisma.attendanceRecord.findUnique({
+    where: { id: recordId },
+    include: { user: true },
+  });
+
+  if (!record) {
+    throw new Error('Attendance record not found.');
+  }
+
+  const updated = await prisma.attendanceRecord.update({
+    where: { id: recordId },
+    data: {
+      overtimeStatus: 'APPROVED',
+      overtimeApprovedAt: new Date(),
+      overtimeApprovedBy: adminActor.name,
+      overtimeRejectionReason: null,
+    },
+    include: { user: true },
+  });
+
+  await logAudit({
+    actorUserId: adminActor.id,
+    actorName: adminActor.name,
+    action: 'OVERTIME_APPROVED',
+    entityType: 'ATTENDANCE',
+    entityId: recordId,
+    reason: `Admin ${adminActor.name} approved overtime work for ${record.user.name} (${record.workerId})`,
+    details: {
+      workerId: record.workerId,
+      attendanceDate: record.attendanceDate,
+      overtimeMachines: record.overtimeMachines,
+      overtimeHours: record.overtimeHours,
+      approvedBy: adminActor.name,
+    },
+  });
+
+  return updated;
+}
+
+/**
+ * Reject worker overtime request
+ */
+export async function rejectOvertime(
+  recordId: string,
+  adminActor: { id: string; name: string },
+  reason?: string
+) {
+  const record = await prisma.attendanceRecord.findUnique({
+    where: { id: recordId },
+    include: { user: true },
+  });
+
+  if (!record) {
+    throw new Error('Attendance record not found.');
+  }
+
+  const updated = await prisma.attendanceRecord.update({
+    where: { id: recordId },
+    data: {
+      overtimeStatus: 'REJECTED',
+      overtimeApprovedAt: new Date(),
+      overtimeApprovedBy: adminActor.name,
+      overtimeRejectionReason: reason || 'Overtime not approved by supervisor/admin',
+    },
+    include: { user: true },
+  });
+
+  await logAudit({
+    actorUserId: adminActor.id,
+    actorName: adminActor.name,
+    action: 'OVERTIME_REJECTED',
+    entityType: 'ATTENDANCE',
+    entityId: recordId,
+    reason: reason || `Admin ${adminActor.name} rejected overtime work`,
+    details: {
+      workerId: record.workerId,
+      attendanceDate: record.attendanceDate,
+      overtimeMachines: record.overtimeMachines,
+      overtimeHours: record.overtimeHours,
+      rejectedBy: adminActor.name,
+      rejectionReason: reason,
+    },
+  });
+
+  return updated;
+}
+
+/**
+ * Bulk approve overtime requests
+ */
+export async function bulkApproveOvertime(
+  recordIds: string[],
+  adminActor: { id: string; name: string }
+) {
+  if (!recordIds || recordIds.length === 0) return { count: 0 };
+
+  const result = await prisma.attendanceRecord.updateMany({
+    where: {
+      id: { in: recordIds },
+      overtimeStatus: 'PENDING',
+    },
+    data: {
+      overtimeStatus: 'APPROVED',
+      overtimeApprovedAt: new Date(),
+      overtimeApprovedBy: adminActor.name,
+    },
+  });
+
+  await logAudit({
+    actorUserId: adminActor.id,
+    actorName: adminActor.name,
+    action: 'BULK_OVERTIME_APPROVED',
+    entityType: 'ATTENDANCE',
+    entityId: 'BATCH',
+    reason: `Admin ${adminActor.name} bulk approved ${result.count} overtime requests`,
+    details: { recordIds, approvedCount: result.count },
+  });
+
+  return result;
 }

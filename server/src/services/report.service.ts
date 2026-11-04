@@ -283,7 +283,9 @@ export async function getWeeklyAttendanceReport(refDateStr?: string, departmentI
       if (rec && rec.checkInAt) {
         daysPresent += 1;
         totalMinutes += rec.workingMinutes;
-        totalOvertimeMinutes += rec.overtimeMinutes;
+        if (rec.overtimeStatus === 'APPROVED') {
+          totalOvertimeMinutes += (rec.overtimeMinutes || 0);
+        }
         totalBreakMinutes += rec.breakMinutes;
         if (rec.lateMinutes > 0) daysLate += 1;
         if (rec.machinesOperated) totalMachinesOperated += rec.machinesOperated;
@@ -321,17 +323,20 @@ export async function getWeeklyAttendanceReport(refDateStr?: string, departmentI
       customEarnings = w.attendanceRecords.reduce((sum: number, r: any) => {
         const m = r.machinesOperated ?? (r.workingMinutes > 0 ? 1 : 0);
         const h = r.hoursOperated ?? (r.workingMinutes / 60);
+        const isApproved = r.overtimeStatus === 'APPROVED';
         const otM = r.overtimeMachines ?? 0;
         const otH = r.overtimeHours ?? (r.overtimeMinutes ? r.overtimeMinutes / 60 : 0);
         const shiftPay = m * h * customRate;
-        const otPay = otM > 0 && otH > 0 ? otM * otH * customRate : otH * (customRate * (m || 1));
+        const otPay = isApproved
+          ? (otM > 0 && otH > 0 ? otM * otH * customRate : otH * (customRate * (m || 1)))
+          : 0;
         return sum + shiftPay + otPay;
       }, 0);
     }
 
     const estimatedPayout = isCustom
       ? Math.round(customEarnings)
-      : Math.round(daysPresent * dailyWage + (totalOvertimeHours * (dailyWage / 8)));
+      : Math.round(daysPresent * dailyWage + (totalOvertimeHours * (dailyWage / 12)));
 
     const operatedDays = w.attendanceRecords.filter((r: any) => (r.machinesOperated || 0) > 0);
     const avgMachines = operatedDays.length > 0
@@ -436,7 +441,9 @@ export async function getMonthlyAttendanceReport(refDateStr?: string, department
       if (r.checkInAt) {
         daysPresent += 1;
         totalMinutes += r.workingMinutes;
-        totalOvertimeMinutes += r.overtimeMinutes;
+        if (r.overtimeStatus === 'APPROVED') {
+          totalOvertimeMinutes += (r.overtimeMinutes || 0);
+        }
         totalBreakMinutes += r.breakMinutes;
         if (r.lateMinutes > 0) daysLate += 1;
         if (r.machinesOperated) totalMachinesOperated += r.machinesOperated;
@@ -455,17 +462,20 @@ export async function getMonthlyAttendanceReport(refDateStr?: string, department
       customEarnings = w.attendanceRecords.reduce((sum: number, r: any) => {
         const m = r.machinesOperated ?? (r.workingMinutes > 0 ? 1 : 0);
         const h = r.hoursOperated ?? (r.workingMinutes / 60);
+        const isApproved = r.overtimeStatus === 'APPROVED';
         const otM = r.overtimeMachines ?? 0;
         const otH = r.overtimeHours ?? (r.overtimeMinutes ? r.overtimeMinutes / 60 : 0);
         const shiftPay = m * h * customRate;
-        const otPay = otM > 0 && otH > 0 ? otM * otH * customRate : otH * (customRate * (m || 1));
+        const otPay = isApproved
+          ? (otM > 0 && otH > 0 ? otM * otH * customRate : otH * (customRate * (m || 1)))
+          : 0;
         return sum + shiftPay + otPay;
       }, 0);
     }
 
     const estimatedPayout = isCustom
       ? Math.round(customEarnings)
-      : Math.round(daysPresent * dailyWage + (totalOvertimeHours * (dailyWage / 8)));
+      : Math.round(daysPresent * dailyWage + (totalOvertimeHours * (dailyWage / 12)));
 
     return {
       userId: w.id,
@@ -567,7 +577,9 @@ export async function getYearlyAttendanceReport(yearRef?: number | string, depar
       if (r.checkInAt) {
         daysPresent += 1;
         totalMinutes += r.workingMinutes;
-        totalOvertimeMinutes += r.overtimeMinutes;
+        if (r.overtimeStatus === 'APPROVED') {
+          totalOvertimeMinutes += (r.overtimeMinutes || 0);
+        }
         totalBreakMinutes += r.breakMinutes;
         if (r.lateMinutes > 0) daysLate += 1;
         if (r.machinesOperated) totalMachinesOperated += r.machinesOperated;
@@ -591,16 +603,19 @@ export async function getYearlyAttendanceReport(yearRef?: number | string, depar
       customEarnings = w.attendanceRecords.reduce((sum: number, r: any) => {
         const m = r.machinesOperated ?? (r.workingMinutes > 0 ? 1 : 0);
         const h = r.hoursOperated ?? (r.workingMinutes / 60);
+        const isApproved = r.overtimeStatus === 'APPROVED';
         const otM = r.overtimeMachines ?? 0;
         const otH = r.overtimeHours ?? (r.overtimeMinutes ? r.overtimeMinutes / 60 : 0);
         const shiftPay = m * h * customRate;
-        const otPay = otM > 0 && otH > 0 ? otM * otH * customRate : otH * (customRate * (m || 1));
+        const otPay = isApproved
+          ? (otM > 0 && otH > 0 ? otM * otH * customRate : otH * (customRate * (m || 1)))
+          : 0;
         return sum + shiftPay + otPay;
       }, 0);
     }
     const estimatedPayout = isCustom
       ? Math.round(customEarnings)
-      : Math.round(daysPresent * dailyWage + (totalOvertimeHours * (dailyWage / 8)));
+      : Math.round(daysPresent * dailyWage + (totalOvertimeHours * (dailyWage / 12)));
 
     return {
       userId: w.id,

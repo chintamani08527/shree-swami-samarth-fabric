@@ -93,6 +93,10 @@ export interface AttendanceRecord {
   hoursOperated?: number | null;
   overtimeMachines?: number | null;
   overtimeHours?: number | null;
+  overtimeStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED' | string | null;
+  overtimeApprovedAt?: string | null;
+  overtimeApprovedBy?: string | null;
+  overtimeRejectionReason?: string | null;
 }
 
 export interface ShiftEarnings {
@@ -109,6 +113,9 @@ export interface ShiftEarnings {
   shiftType: string;
   status: string;
   formula?: string;
+  overtimeStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED' | string | null;
+  isOvertimeApproved?: boolean;
+  overtimePendingAmount?: number;
 }
 
 export interface WorkerTodayStatus {
@@ -132,6 +139,10 @@ export interface WorkerTodayStatus {
     hoursOperated?: number | null;
     overtimeMachines?: number | null;
     overtimeHours?: number | null;
+    overtimeStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED' | string | null;
+    overtimeApprovedAt?: string | null;
+    overtimeApprovedBy?: string | null;
+    overtimeRejectionReason?: string | null;
     earnings?: ShiftEarnings | null;
   };
   worker?: {
@@ -259,4 +270,47 @@ export interface CompanySettingsData {
     };
   };
   shifts: Shift[];
+}
+
+export interface OvertimeRequestItem {
+  id: string;
+  userId: string;
+  workerId: string;
+  workerName: string;
+  phone?: string | null;
+  departmentName: string;
+  unit: string;
+  attendanceDate: string;
+  shiftType: string;
+  checkInAt?: string | null;
+  checkOutAt?: string | null;
+  checkInTime: string;
+  checkOutTime: string;
+  workingMinutes: number;
+  workingHours: number;
+  machinesOperated?: number | null;
+  hoursOperated?: number | null;
+  overtimeMachines: number;
+  overtimeHours: number;
+  overtimeStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | string;
+  overtimeApprovedAt?: string | null;
+  overtimeApprovedBy?: string | null;
+  overtimeRejectionReason?: string | null;
+  estimatedOtPay: number;
+  wageType: 'FIXED' | 'CUSTOM' | string;
+  customWageRate?: number | null;
+  dailyWage?: number | null;
+  remarks?: string | null;
+}
+
+export interface OvertimeRequestsResponse {
+  items: OvertimeRequestItem[];
+  summary: {
+    totalPendingCount: number;
+    totalPendingAmount: number;
+    totalApprovedCount: number;
+    totalApprovedAmount: number;
+    totalRejectedCount: number;
+    totalCount: number;
+  };
 }

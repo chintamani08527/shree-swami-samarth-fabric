@@ -9,6 +9,10 @@ import {
   listAttendanceRecords,
   correctAttendanceRecord,
   getCurrentlyCheckedInWorkers,
+  getOvertimeRequests,
+  approveOvertime,
+  rejectOvertime,
+  bulkApproveOvertime,
 } from '../services/attendance.service.js';
 import { authenticate } from '../middleware/auth.js';
 import { requireAdmin, requireSupervisorOrAdmin } from '../middleware/roles.js';
@@ -226,6 +230,81 @@ router.get('/live', requireSupervisorOrAdmin, async (req: Request, res: Response
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 6b. Admin / Supervisor: Overtime approval list
+router.get('/overtime/list', requireSupervisorOrAdmin, async (req: Request, res: Response) => {
+  try {
+    const { status, startDate, endDate } = req.query;
+    const result = await getOvertimeRequests({
+      status: status as string,
+      startDate: startDate as string,
+      endDate: endDate as string,
+    });
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 6c. Admin: Approve single overtime request
+router.post('/overtime/:id/approve', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const updated = await approveOvertime(req.params.id, {
+      id: req.user!.id,
+      name: req.user!.name,
+    });
+    res.json({
+      success: true,
+      message: 'Worker overtime request approved. Overtime amount added to regular salary.',
+      data: updated,
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+// 6d. Admin: Reject single overtime request
+router.post('/overtime/:id/reject', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { reason } = req.body;
+    const updated = await rejectOvertime(
+      req.params.id,
+      { id: req.user!.id, name: req.user!.name },
+      reason
+    );
+    res.json({
+      success: true,
+      message: 'Worker overtime request rejected.',
+      data: updated,
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+// 6e. Admin: Bulk approve overtime requests
+router.post('/overtime/bulk-approve', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { recordIds } = req.body;
+    if (!Array.isArray(recordIds) || recordIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'recordIds must be a non-empty array of IDs.' });
+    }
+    const result = await bulkApproveOvertime(recordIds, {
+      id: req.user!.id,
+      name: req.user!.name,
+    });
+    res.json({
+      success: true,
+      message: `Successfully approved ${result.count} overtime requests.`,
+      count: result.count,
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
   }
 });
 

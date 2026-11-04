@@ -71,6 +71,10 @@ model AttendanceRecord {
   hoursOperated     Float?    // Custom wages: total hours machines operated
   overtimeMachines  Int?      // Overtime portal: count of machines operated during overtime
   overtimeHours     Float?    // Overtime portal: hours operated during overtime
+  overtimeStatus    String?   @default("NONE") // NONE, PENDING, APPROVED, REJECTED
+  overtimeApprovedAt DateTime?
+  overtimeApprovedBy String?   // Admin actor name who approved/rejected
+  overtimeRejectionReason String?
   isMissingCheckOut Boolean   @default(false)
   remarks           String?   // Notes, correction reasons, etc.
 
@@ -81,6 +85,7 @@ model AttendanceRecord {
   @@index([attendanceDate])
   @@index([workerId])
   @@index([status])
+  @@index([overtimeStatus])
   @@index([isMissingCheckOut])
 }
 

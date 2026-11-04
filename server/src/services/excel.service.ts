@@ -138,7 +138,10 @@ export async function generateWeeklyExcelReport(
       if (r.checkInAt) {
         presentCount += 1;
         totalMinutes += r.workingMinutes;
-        totalOvertimeMinutes += (r.overtimeMinutes || 0);
+        const isOtApproved = r.overtimeStatus === 'APPROVED';
+        if (isOtApproved) {
+          totalOvertimeMinutes += (r.overtimeMinutes || 0);
+        }
         if (r.machinesOperated) totalMachinesLogged += r.machinesOperated;
 
         if (isCustom && customRate > 0) {
@@ -147,7 +150,9 @@ export async function generateWeeklyExcelReport(
           const otM = r.overtimeMachines ?? 0;
           const otH = r.overtimeHours ?? (r.overtimeMinutes ? r.overtimeMinutes / 60 : 0);
           const shiftPay = m * h * customRate;
-          const otPay = otM > 0 && otH > 0 ? otM * otH * customRate : otH * (customRate * (m || 1));
+          const otPay = isOtApproved
+            ? (otM > 0 && otH > 0 ? otM * otH * customRate : otH * (customRate * (m || 1)))
+            : 0;
           customEarnings += (shiftPay + otPay);
         }
       }
@@ -170,7 +175,7 @@ export async function generateWeeklyExcelReport(
 
     const calculatedSalary = isCustom
       ? Math.round(customEarnings)
-      : Math.round((presentCount * dailyWage) + (totalOtHours * (dailyWage / 8)));
+      : Math.round((presentCount * dailyWage) + (totalOtHours * (dailyWage / 12)));
 
     grandTotalDaysPresent += presentCount;
     grandTotalMachines += machinesOperated;
@@ -539,7 +544,10 @@ export async function generateMonthlyExcelReport(
       if (r.checkInAt) {
         daysPresent += 1;
         totalMinutes += r.workingMinutes;
-        overtimeMinutes += (r.overtimeMinutes || 0);
+        const isOtApproved = r.overtimeStatus === 'APPROVED';
+        if (isOtApproved) {
+          overtimeMinutes += (r.overtimeMinutes || 0);
+        }
         if (r.lateMinutes > 0) daysLate += 1;
         if (r.machinesOperated) totalMachinesLogged += r.machinesOperated;
 
@@ -549,7 +557,9 @@ export async function generateMonthlyExcelReport(
           const otM = r.overtimeMachines ?? 0;
           const otH = r.overtimeHours ?? (r.overtimeMinutes ? r.overtimeMinutes / 60 : 0);
           const shiftPay = m * h * customRate;
-          const otPay = otM > 0 && otH > 0 ? otM * otH * customRate : otH * (customRate * (m || 1));
+          const otPay = isOtApproved
+            ? (otM > 0 && otH > 0 ? otM * otH * customRate : otH * (customRate * (m || 1)))
+            : 0;
           customEarnings += (shiftPay + otPay);
         }
       }
@@ -575,7 +585,7 @@ export async function generateMonthlyExcelReport(
     // Accurate salary calculation
     const calculatedSalary = isCustom
       ? Math.round(customEarnings)
-      : Math.round((daysPresent * dailyWage) + (totalOtHours * (dailyWage / 8)));
+      : Math.round((daysPresent * dailyWage) + (totalOtHours * (dailyWage / 12)));
 
     totalPayoutAll += calculatedSalary;
     totalDaysPresentAll += daysPresent;
@@ -709,7 +719,10 @@ export async function generateMonthlyExcelReport(
       if (r.checkInAt) {
         daysPresent += 1;
         totalMinutes += r.workingMinutes;
-        overtimeMinutes += (r.overtimeMinutes || 0);
+        const isOtApproved = r.overtimeStatus === 'APPROVED';
+        if (isOtApproved) {
+          overtimeMinutes += (r.overtimeMinutes || 0);
+        }
 
         if (isCustom && customRate > 0) {
           const m = r.machinesOperated ?? (r.workingMinutes > 0 ? 1 : 0);
@@ -717,7 +730,9 @@ export async function generateMonthlyExcelReport(
           const otM = r.overtimeMachines ?? 0;
           const otH = r.overtimeHours ?? (r.overtimeMinutes ? r.overtimeMinutes / 60 : 0);
           const shiftPay = m * h * customRate;
-          const otPay = otM > 0 && otH > 0 ? otM * otH * customRate : otH * (customRate * (m || 1));
+          const otPay = isOtApproved
+            ? (otM > 0 && otH > 0 ? otM * otH * customRate : otH * (customRate * (m || 1)))
+            : 0;
           customEarnings += (shiftPay + otPay);
         }
       }
@@ -728,7 +743,7 @@ export async function generateMonthlyExcelReport(
     const daysAbsent = Math.max(0, month.totalDays - daysPresent);
     const calculatedSalary = isCustom
       ? Math.round(customEarnings)
-      : Math.round((daysPresent * dailyWage) + (otHours * (dailyWage / 8)));
+      : Math.round((daysPresent * dailyWage) + (otHours * (dailyWage / 12)));
 
     const row = detailSheet.addRow([
       w.workerId,
@@ -913,7 +928,10 @@ export async function generateYearlyExcelReport(
       if (r.checkInAt) {
         daysPresent += 1;
         totalMinutes += r.workingMinutes;
-        overtimeMinutes += (r.overtimeMinutes || 0);
+        const isOtApproved = r.overtimeStatus === 'APPROVED';
+        if (isOtApproved) {
+          overtimeMinutes += (r.overtimeMinutes || 0);
+        }
         const m = parseInt(r.attendanceDate.split('-')[1], 10) - 1;
         if (m >= 0 && m < 12) {
           monthlyCounts[m] += 1;
@@ -925,7 +943,9 @@ export async function generateYearlyExcelReport(
           const otM = r.overtimeMachines ?? 0;
           const otH = r.overtimeHours ?? (r.overtimeMinutes ? r.overtimeMinutes / 60 : 0);
           const shiftPay = mach * hrs * customRate;
-          const otPay = otM > 0 && otH > 0 ? otM * otH * customRate : otH * (customRate * (mach || 1));
+          const otPay = isOtApproved
+            ? (otM > 0 && otH > 0 ? otM * otH * customRate : otH * (customRate * (mach || 1)))
+            : 0;
           customEarnings += (shiftPay + otPay);
         }
       }
@@ -935,7 +955,7 @@ export async function generateYearlyExcelReport(
     const otHours = Number((overtimeMinutes / 60).toFixed(2));
     const payout = isCustom
       ? Math.round(customEarnings)
-      : Math.round((daysPresent * dailyWage) + (otHours * (dailyWage / 8)));
+      : Math.round((daysPresent * dailyWage) + (otHours * (dailyWage / 12)));
 
     const row = sheet.addRow([
       w.workerId,
