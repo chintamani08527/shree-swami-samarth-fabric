@@ -97,6 +97,7 @@ export interface AttendanceRecord {
   overtimeApprovedAt?: string | null;
   overtimeApprovedBy?: string | null;
   overtimeRejectionReason?: string | null;
+  earnings?: ShiftEarnings | null;
 }
 
 export interface ShiftEarnings {
@@ -176,6 +177,10 @@ export interface WorkerTodayStatus {
     daysPresent: number;
     daysLate: number;
     totalHours: number;
+    totalWeeklyEarnings?: number;
+    totalWeeklyBaseEarnings?: number;
+    totalWeeklyApprovedOvertime?: number;
+    totalWeeklyPendingOvertime?: number;
   };
 }
 

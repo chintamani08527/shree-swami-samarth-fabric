@@ -753,9 +753,16 @@ export const WorkerDashboard: React.FC = () => {
                               <span>
                                 ₹ {(statusData?.today?.earnings?.totalEarned ?? (statusData?.worker?.dailyWage || user?.dailyWage || 1000)).toLocaleString('en-IN')}
                               </span>
-                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full uppercase tracking-wide">
-                                Verified
-                              </span>
+                              {statusData?.today?.overtimeStatus === 'APPROVED' ? (
+                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full uppercase tracking-wide flex items-center gap-0.5">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                  OT Added
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full uppercase tracking-wide">
+                                  Verified
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -794,6 +801,31 @@ export const WorkerDashboard: React.FC = () => {
                           <span>Celebration 🎉</span>
                         </button>
                       </div>
+
+                      {/* Overtime Approval Salary Addition Notice */}
+                      {statusData?.today?.overtimeStatus === 'APPROVED' && (statusData?.today?.earnings?.overtimeEarned || 0) > 0 && (
+                        <div className="mt-3 pt-2.5 border-t border-amber-300/60 flex items-center justify-between text-xs flex-wrap gap-1 bg-white/70 p-2.5 rounded-xl">
+                          <span className="text-slate-600 font-medium">
+                            Regular Base: <strong>₹{(statusData.today.earnings?.baseEarned ?? statusData.worker?.dailyWage ?? 1000).toLocaleString('en-IN')}</strong>
+                          </span>
+                          <span className="text-emerald-800 font-bold bg-emerald-100 px-2.5 py-1 rounded-lg flex items-center gap-1 border border-emerald-200">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            Approved OT Added: + ₹{(statusData.today.earnings?.overtimeEarned || 0).toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                      )}
+
+                      {statusData?.today?.overtimeStatus === 'PENDING' && (statusData?.today?.earnings?.overtimePendingAmount || statusData?.today?.earnings?.overtimeEarned || 0) > 0 && (
+                        <div className="mt-3 pt-2.5 border-t border-amber-300/60 flex items-center justify-between text-xs flex-wrap gap-1 bg-white/70 p-2.5 rounded-xl">
+                          <span className="text-slate-600 font-medium">
+                            Current Base Wage: <strong>₹{(statusData.today.earnings?.baseEarned ?? statusData.worker?.dailyWage ?? 1000).toLocaleString('en-IN')}</strong>
+                          </span>
+                          <span className="text-amber-900 font-bold bg-amber-100/90 px-2.5 py-1 rounded-lg flex items-center gap-1 border border-amber-300 animate-pulse">
+                            <Clock className="w-3.5 h-3.5 text-amber-600" />
+                            OT ₹{(statusData.today.earnings?.overtimePendingAmount || statusData.today.earnings?.overtimeEarned || 0).toLocaleString('en-IN')} (Pending Admin Approval)
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -964,11 +996,46 @@ export const WorkerDashboard: React.FC = () => {
             </div>
 
             {/* Weekly Summary Card */}
-            <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
-              <h3 className="text-sm font-bold text-navy-950 mb-3 flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-teal-600" />
-                <span>This Week's Summary</span>
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-3">
+              <h3 className="text-sm font-bold text-navy-950 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-teal-600" />
+                  <span>This Week's Summary • आठवड्याचा सारांश</span>
+                </div>
+                <span className="text-[10px] font-bold text-slate-400 font-mono">
+                  {statusData?.weeklySummary?.startDate} - {statusData?.weeklySummary?.endDate}
+                </span>
               </h3>
+
+              {/* Weekly Earnings Box with Approved Overtime */}
+              <div className="p-3.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-white rounded-xl border border-emerald-200/90 shadow-2xs">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <span className="text-[10px] font-extrabold text-emerald-800 uppercase tracking-wider block">
+                      Weekly Salary • आठवड्याचा एकूण पगार
+                    </span>
+                    <div className="text-2xl sm:text-3xl font-black text-emerald-900 mt-0.5">
+                      ₹ {(statusData?.weeklySummary?.totalWeeklyEarnings ?? 0).toLocaleString('en-IN')}
+                    </div>
+                  </div>
+                  <div className="text-right text-xs space-y-1">
+                    <div className="text-slate-600 font-medium">
+                      Base Wage: <strong>₹{(statusData?.weeklySummary?.totalWeeklyBaseEarnings ?? 0).toLocaleString('en-IN')}</strong>
+                    </div>
+                    {(statusData?.weeklySummary?.totalWeeklyApprovedOvertime ?? 0) > 0 ? (
+                      <div className="text-emerald-700 font-bold bg-emerald-100/90 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>+ Approved OT: ₹{statusData?.weeklySummary?.totalWeeklyApprovedOvertime?.toLocaleString('en-IN')}</span>
+                      </div>
+                    ) : (statusData?.weeklySummary?.totalWeeklyPendingOvertime ?? 0) > 0 ? (
+                      <div className="text-amber-800 font-bold bg-amber-100/90 px-2 py-0.5 rounded-md inline-flex items-center gap-1 animate-pulse">
+                        <Clock className="w-3.5 h-3.5 text-amber-600" />
+                        <span>⏳ Pending OT: ₹{statusData?.weeklySummary?.totalWeeklyPendingOvertime?.toLocaleString('en-IN')}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
 
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
@@ -1123,6 +1190,42 @@ export const WorkerDashboard: React.FC = () => {
                   </div>
                 </div>
               ) : null}
+
+              {/* Overtime Approval Confirmation Alert */}
+              {statusData?.today.overtimeStatus === 'APPROVED' && (
+                <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-300 flex items-start gap-3">
+                  <div className="p-2 bg-emerald-600 text-white rounded-lg shrink-0 mt-0.5">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-xs sm:text-sm font-black text-emerald-950 flex items-center gap-1.5 flex-wrap">
+                      <span>Overtime Approved by Admin! (मंजूर झाले)</span>
+                      <span className="text-[10px] bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full font-bold">
+                        Salary Added
+                      </span>
+                    </div>
+                    <p className="text-xs text-emerald-800 mt-1">
+                      Your overtime work has been approved. The overtime pay has been credited to your regular salary on your Shift and History screens!
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {statusData?.today.overtimeStatus === 'PENDING' && (statusData.today.overtimeHours || Number(statusData.today.overtimeMachines || 0) > 0) && (
+                <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-300 flex items-start gap-3">
+                  <div className="p-2 bg-amber-500 text-white rounded-lg shrink-0 mt-0.5">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-xs sm:text-sm font-black text-amber-950 flex items-center gap-1.5 flex-wrap">
+                      <span>Overtime Pending Admin Approval (मंजुरी बाकी)</span>
+                    </div>
+                    <p className="text-xs text-amber-800 mt-0.5">
+                      Your overtime log has been submitted to the Admin portal for verification. Once approved, the salary will be added to your regular earnings.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Overtime Entry Form Card */}
@@ -1266,10 +1369,10 @@ export const WorkerDashboard: React.FC = () => {
                 {historyRecords.map((r) => (
                   <div
                     key={r.id}
-                    className="p-3.5 bg-slate-50 hover:bg-slate-100/70 rounded-xl border border-slate-200/80 flex items-center justify-between transition-colors"
+                    className="p-3.5 bg-slate-50 hover:bg-slate-100/70 rounded-xl border border-slate-200/80 flex items-center justify-between transition-colors gap-3"
                   >
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-bold text-navy-950">{r.formattedDate}</span>
                         <span className="text-[11px] text-slate-500 font-medium">({r.dayOfWeek})</span>
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
@@ -1279,8 +1382,25 @@ export const WorkerDashboard: React.FC = () => {
                         }`}>
                           {r.shiftType === 'NIGHT' ? '🌙 Night' : '☀️ Day'}
                         </span>
+
+                        {/* Overtime Approval Badge */}
+                        {r.overtimeStatus === 'APPROVED' ? (
+                          <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200 flex items-center gap-0.5">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            OT Added (+₹{r.earnings?.overtimeEarned || 0})
+                          </span>
+                        ) : r.overtimeStatus === 'PENDING' ? (
+                          <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded border border-amber-300 animate-pulse flex items-center gap-0.5">
+                            <Clock className="w-3 h-3 text-amber-600" />
+                            OT Pending
+                          </span>
+                        ) : r.overtimeStatus === 'REJECTED' ? (
+                          <span className="text-[10px] font-bold bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded border border-rose-200">
+                            OT Rejected
+                          </span>
+                        ) : null}
                       </div>
-                      <div className="flex items-center gap-3 text-[11px] text-slate-600 mt-1 font-mono">
+                      <div className="flex items-center gap-3 text-[11px] text-slate-600 mt-1 font-mono flex-wrap">
                         <span>In: {r.checkInTime}</span>
                         <span>•</span>
                         <span>Out: {r.checkOutTime}</span>
@@ -1288,6 +1408,12 @@ export const WorkerDashboard: React.FC = () => {
                           <>
                             <span>•</span>
                             <span className="font-bold text-teal-700">{r.workingHours}h</span>
+                          </>
+                        )}
+                        {r.overtimeHours && r.overtimeHours > 0 && (
+                          <>
+                            <span>•</span>
+                            <span className="font-bold text-amber-700">OT: {r.overtimeHours}h</span>
                           </>
                         )}
                       </div>
@@ -1301,8 +1427,13 @@ export const WorkerDashboard: React.FC = () => {
                       )}
                     </div>
 
-                    <div className="flex flex-col items-end gap-1">
+                    <div className="flex flex-col items-end gap-1 shrink-0">
                       <StatusBadge status={r.status} size="sm" />
+                      {r.earnings?.totalEarned !== undefined && r.earnings?.totalEarned > 0 && (
+                        <span className="text-xs font-black text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 font-mono">
+                          ₹{r.earnings.totalEarned.toLocaleString('en-IN')}
+                        </span>
+                      )}
                       {r.lateMinutes > 0 && (
                         <span className="text-[10px] text-amber-600 font-semibold">
                           Late {r.lateMinutes}m

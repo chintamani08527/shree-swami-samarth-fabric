@@ -692,12 +692,30 @@ export async function getWorkerStatus(userId: string) {
   let totalWeeklyMinutes = 0;
   let daysPresent = 0;
   let daysLate = 0;
+  let totalWeeklyEarnings = 0;
+  let totalWeeklyBaseEarnings = 0;
+  let totalWeeklyApprovedOvertime = 0;
+  let totalWeeklyPendingOvertime = 0;
 
   weeklyRecords.forEach((r) => {
     if (r.checkInAt) {
       daysPresent += 1;
       totalWeeklyMinutes += r.workingMinutes;
       if (r.lateMinutes > 0) daysLate += 1;
+
+      const shiftEarnings = calculateShiftEarnings(
+        user,
+        r,
+        r.workingMinutes,
+        r.status
+      );
+      totalWeeklyEarnings += shiftEarnings.totalEarned;
+      totalWeeklyBaseEarnings += shiftEarnings.baseEarned;
+      if (shiftEarnings.isOvertimeApproved) {
+        totalWeeklyApprovedOvertime += shiftEarnings.overtimeEarned;
+      } else if (shiftEarnings.overtimeStatus === 'PENDING') {
+        totalWeeklyPendingOvertime += shiftEarnings.overtimePendingAmount || shiftEarnings.overtimeEarned;
+      }
     }
   });
 
@@ -707,12 +725,12 @@ export async function getWorkerStatus(userId: string) {
   const displayDate = activeRecord?.attendanceDate || todayDate;
 
   let earnings: any = null;
-  if (isCheckedOut && activeRecord) {
+  if (activeRecord && (activeRecord.checkInAt || activeRecord.overtimeHours || activeRecord.machinesOperated)) {
     earnings = calculateShiftEarnings(
       user,
       activeRecord,
-      activeRecord.workingMinutes,
-      activeRecord.status
+      liveDurationMinutes,
+      activeRecord.status || (isCheckedIn ? AttendanceStatuses.PRESENT : 'NOT_MARKED')
     );
   }
 
@@ -770,6 +788,10 @@ export async function getWorkerStatus(userId: string) {
       daysPresent,
       daysLate,
       totalHours: Number((totalWeeklyMinutes / 60).toFixed(2)),
+      totalWeeklyEarnings,
+      totalWeeklyBaseEarnings,
+      totalWeeklyApprovedOvertime,
+      totalWeeklyPendingOvertime,
     },
   };
 }
@@ -796,33 +818,55 @@ export async function getWorkerAttendanceHistory(
     where.attendanceDate = { lte: endDate };
   }
 
-  const records = await prisma.attendanceRecord.findMany({
-    where,
-    orderBy: { attendanceDate: 'desc' },
-    take: limit,
-  });
+  const [user, records] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        wageType: true,
+        dailyWage: true,
+        customWageRate: true,
+        hasCustomWageAccess: true,
+      },
+    }),
+    prisma.attendanceRecord.findMany({
+      where,
+      orderBy: { attendanceDate: 'desc' },
+      take: limit,
+    }),
+  ]);
 
-  return records.map((r) => ({
-    id: r.id,
-    date: r.attendanceDate,
-    formattedDate: formatKolkataDate(r.attendanceDate),
-    dayOfWeek: getDayOfWeekName(r.attendanceDate),
-    checkInTime: formatKolkataTime(r.checkInAt),
-    checkOutTime: formatKolkataTime(r.checkOutAt),
-    checkInAt: r.checkInAt,
-    checkOutAt: r.checkOutAt,
-    workingHours: Number((r.workingMinutes / 60).toFixed(2)),
-    breakMinutes: r.breakMinutes,
-    status: r.status,
-    lateMinutes: r.lateMinutes,
-    shiftType: r.shiftType || 'DAY',
-    machinesOperated: r.machinesOperated ?? null,
-    hoursOperated: r.hoursOperated ?? null,
-    overtimeMachines: r.overtimeMachines ?? null,
-    overtimeHours: r.overtimeHours ?? (r.overtimeMinutes ? Number((r.overtimeMinutes / 60).toFixed(1)) : null),
-    isMissingCheckOut: r.isMissingCheckOut,
-    remarks: r.remarks,
-  }));
+  return records.map((r) => {
+    const earnings = user && r.checkInAt
+      ? calculateShiftEarnings(user, r, r.workingMinutes, r.status)
+      : null;
+
+    return {
+      id: r.id,
+      date: r.attendanceDate,
+      formattedDate: formatKolkataDate(r.attendanceDate),
+      dayOfWeek: getDayOfWeekName(r.attendanceDate),
+      checkInTime: formatKolkataTime(r.checkInAt),
+      checkOutTime: formatKolkataTime(r.checkOutAt),
+      checkInAt: r.checkInAt,
+      checkOutAt: r.checkOutAt,
+      workingHours: Number((r.workingMinutes / 60).toFixed(2)),
+      breakMinutes: r.breakMinutes,
+      status: r.status,
+      lateMinutes: r.lateMinutes,
+      shiftType: r.shiftType || 'DAY',
+      machinesOperated: r.machinesOperated ?? null,
+      hoursOperated: r.hoursOperated ?? null,
+      overtimeMachines: r.overtimeMachines ?? null,
+      overtimeHours: r.overtimeHours ?? (r.overtimeMinutes ? Number((r.overtimeMinutes / 60).toFixed(1)) : null),
+      overtimeStatus: r.overtimeStatus || 'NONE',
+      overtimeApprovedAt: r.overtimeApprovedAt || null,
+      overtimeApprovedBy: r.overtimeApprovedBy || null,
+      overtimeRejectionReason: r.overtimeRejectionReason || null,
+      isMissingCheckOut: r.isMissingCheckOut,
+      remarks: r.remarks,
+      earnings,
+    };
+  });
 }
 
 /**
