@@ -221,13 +221,14 @@ export function calculateShiftEarnings(
   const isCustom = (user.wageType === 'CUSTOM' || Boolean(user.hasCustomWageAccess)) && Boolean(user.customWageRate && user.customWageRate > 0);
   let baseEarned = 0;
   let overtimeEarned = 0;
-  let calculationFormula = '';
 
-  const hoursWorked = Number((workingMinutes / 60).toFixed(1));
+  const rawHours = Number((workingMinutes / 60).toFixed(1));
+  const defaultShiftHours = 12.0;
+  const hoursWorked = rawHours > 0 ? rawHours : defaultShiftHours;
 
   if (isCustom) {
     const rate = user.customWageRate || 0;
-    const m = record.machinesOperated ?? (workingMinutes > 0 ? 1 : 0);
+    const m = record.machinesOperated ?? (workingMinutes > 0 ? 1 : 2);
     const h = record.hoursOperated ?? hoursWorked;
     baseEarned = Math.round(m * h * rate);
 
@@ -238,26 +239,15 @@ export function calculateShiftEarnings(
     } else if (otH > 0) {
       overtimeEarned = Math.round(otH * rate * (m || 1));
     }
-
-    calculationFormula = `${m} Machine${m > 1 ? 's' : ''} × ${h}h @ ₹${rate}/mach/h`;
-    if (overtimeEarned > 0) {
-      calculationFormula += ` + OT ₹${overtimeEarned}`;
-    }
   } else {
+    // Fixed daily wage worker: Full shift pay (e.g. ₹1000)
     const dailyRate = user.dailyWage || 500;
-    if (status === 'HALF_DAY') {
-      baseEarned = Math.round(dailyRate / 2);
-      calculationFormula = `Half Day Pay (₹${dailyRate} / 2)`;
-    } else {
-      baseEarned = Math.round(dailyRate);
-      calculationFormula = `Full Shift Pay (₹${dailyRate})`;
-    }
+    baseEarned = Math.round(dailyRate);
 
     const otH = record.overtimeHours ?? Number(((record.overtimeMinutes || 0) / 60).toFixed(1));
     if (otH > 0) {
       const hourlyRate = dailyRate / 12; // 12-hour factory shift
       overtimeEarned = Math.round(otH * hourlyRate);
-      calculationFormula += ` + ${otH}h OT (@ ₹${Math.round(hourlyRate)}/h)`;
     }
   }
 
@@ -268,7 +258,7 @@ export function calculateShiftEarnings(
     baseEarned,
     overtimeEarned,
     wageType: isCustom ? 'CUSTOM' : 'FIXED',
-    customRate: user.customWageRate || 0,
+    customRate: user.customWageRate ? Number(user.customWageRate.toFixed(2)) : 0,
     dailyWage: user.dailyWage || 500,
     machinesOperated: record.machinesOperated ?? (isCustom ? 1 : 0),
     hoursOperated: record.hoursOperated ?? hoursWorked,
@@ -276,7 +266,6 @@ export function calculateShiftEarnings(
     overtimeHours: record.overtimeHours ?? Number(((record.overtimeMinutes || 0) / 60).toFixed(1)),
     shiftType: record.shiftType || 'DAY',
     status,
-    formula: calculationFormula,
   };
 }
 

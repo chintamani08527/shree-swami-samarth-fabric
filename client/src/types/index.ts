@@ -108,7 +108,7 @@ export interface ShiftEarnings {
   overtimeHours: number;
   shiftType: string;
   status: string;
-  formula: string;
+  formula?: string;
 }
 
 export interface WorkerTodayStatus {

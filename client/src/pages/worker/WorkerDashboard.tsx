@@ -290,9 +290,21 @@ export const WorkerDashboard: React.FC = () => {
       const res = await attendanceApi.checkOut();
       if (res.success) {
         showToast(res.message, 'success');
-        if (res.earnings) {
-          triggerCelebration(res.earnings);
-        }
+        const dailyRate = statusData?.worker?.dailyWage || user?.dailyWage || 1000;
+        const earningsObj = res.earnings || {
+          totalEarned: dailyRate,
+          baseEarned: dailyRate,
+          overtimeEarned: 0,
+          wageType: hasCustomWageAccess ? 'CUSTOM' : 'FIXED',
+          dailyWage: dailyRate,
+          machinesOperated: 0,
+          hoursOperated: 12,
+          overtimeMachines: 0,
+          overtimeHours: 0,
+          shiftType: statusData?.today?.shiftType || selectedShift,
+          status: 'PRESENT',
+        };
+        triggerCelebration(earningsObj);
         await loadData();
       }
     } catch (err: any) {
@@ -318,9 +330,35 @@ export const WorkerDashboard: React.FC = () => {
       if (res.success) {
         showToast(res.message, 'success');
         setCheckOutPromptOpen(false);
-        if (res.earnings) {
-          triggerCelebration(res.earnings);
-        }
+
+        const dailyRate = statusData?.worker?.dailyWage || user?.dailyWage || 1000;
+        const isCustom = hasCustomWageAccess || Boolean(statusData?.worker?.customWageRate);
+        const rate = statusData?.worker?.customWageRate || 29.17;
+        const m = machinesOperated ? parseInt(machinesOperated, 10) : 1;
+        const h = hoursOperated ? parseFloat(hoursOperated) : 12;
+        const otH = overtimeHours ? parseFloat(overtimeHours) : 0;
+        const otM = overtimeMachines ? parseInt(overtimeMachines, 10) : 0;
+
+        const customBase = Math.round(m * h * rate);
+        const customOT = otM > 0 && otH > 0 ? Math.round(otM * otH * rate) : Math.round(otH * rate * m);
+        const fixedOT = Math.round(otH * (dailyRate / 12));
+
+        const fallbackEarnings: ShiftEarnings = {
+          totalEarned: isCustom ? customBase + customOT : dailyRate + fixedOT,
+          baseEarned: isCustom ? customBase : dailyRate,
+          overtimeEarned: isCustom ? customOT : fixedOT,
+          wageType: isCustom ? 'CUSTOM' : 'FIXED',
+          customRate: rate,
+          dailyWage: dailyRate,
+          machinesOperated: isCustom ? m : 0,
+          hoursOperated: h,
+          overtimeMachines: otM,
+          overtimeHours: otH,
+          shiftType: statusData?.today?.shiftType || selectedShift,
+          status: 'PRESENT',
+        };
+
+        triggerCelebration(res.earnings || fallbackEarnings);
         await loadData();
       }
     } catch (err: any) {
@@ -711,7 +749,9 @@ export const WorkerDashboard: React.FC = () => {
                               Today's Shift Earnings • आजची कमाई
                             </div>
                             <div className="text-2xl sm:text-3xl font-black text-navy-950 flex items-center gap-2">
-                              <span>₹ {(statusData?.today?.earnings?.totalEarned ?? 0).toLocaleString('en-IN')}</span>
+                              <span>
+                                ₹ {(statusData?.today?.earnings?.totalEarned ?? (statusData?.worker?.dailyWage || user?.dailyWage || 1000)).toLocaleString('en-IN')}
+                              </span>
                               <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full uppercase tracking-wide">
                                 Verified
                               </span>
@@ -728,7 +768,7 @@ export const WorkerDashboard: React.FC = () => {
                               const hours = statusData?.today?.workingHours || 12;
                               const isCustom = statusData?.worker?.wageType === 'CUSTOM' || Boolean(statusData?.worker?.hasCustomWageAccess);
                               const rate = statusData?.worker?.customWageRate || 29.17;
-                              const daily = statusData?.worker?.dailyWage || 500;
+                              const daily = statusData?.worker?.dailyWage || user?.dailyWage || 1000;
                               const m = statusData?.today?.machinesOperated || 1;
                               const base = isCustom ? Math.round(m * hours * rate) : daily;
                               triggerCelebration({
@@ -736,13 +776,14 @@ export const WorkerDashboard: React.FC = () => {
                                 baseEarned: base,
                                 overtimeEarned: 0,
                                 wageType: isCustom ? 'CUSTOM' : 'FIXED',
-                                machinesOperated: m,
+                                customRate: rate,
+                                dailyWage: daily,
+                                machinesOperated: isCustom ? m : 0,
                                 hoursOperated: hours,
                                 overtimeMachines: 0,
                                 overtimeHours: 0,
                                 shiftType: statusData?.today?.shiftType || 'DAY',
                                 status: statusData?.today?.status || 'PRESENT',
-                                formula: isCustom ? `${m} Looms × ${hours}h @ ₹${rate}/loom/h` : `Daily Wage ₹${daily}`,
                               });
                             }
                           }}
@@ -752,15 +793,6 @@ export const WorkerDashboard: React.FC = () => {
                           <span>Celebration 🎉</span>
                         </button>
                       </div>
-
-                      {statusData?.today?.earnings?.formula && (
-                        <div className="mt-3 pt-2.5 border-t border-amber-200/60 flex items-center justify-between text-xs text-slate-600">
-                          <span className="font-medium text-slate-500">Pay Breakdown:</span>
-                          <span className="font-semibold text-navy-950 font-mono text-[11px] sm:text-xs">
-                            {statusData.today.earnings.formula}
-                          </span>
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}
@@ -1561,8 +1593,8 @@ export const WorkerDashboard: React.FC = () => {
             )}
           </div>
 
-          {/* COMBINED PROJECTED PAYOUT SUMMARY */}
-          {statusData?.worker?.customWageRate && (
+          {/* COMBINED PROJECTED PAYOUT SUMMARY (FOR BOTH CUSTOM AND FIXED WORKERS) */}
+          {statusData?.worker?.customWageRate ? (
             (() => {
               const rate = statusData.worker.customWageRate;
               const shiftM = machinesOperated ? Number(machinesOperated) : 0;
@@ -1578,10 +1610,39 @@ export const WorkerDashboard: React.FC = () => {
                 <div className="p-3 bg-slate-900 text-white rounded-xl space-y-1">
                   <div className="flex items-center justify-between text-[11px] text-slate-400">
                     <span>Shift: ₹{Math.round(shiftPay).toLocaleString('en-IN')} | OT: ₹{Math.round(otPay).toLocaleString('en-IN')}</span>
-                    <span className="font-mono text-slate-400">Rate: ₹{rate}/mc/hr</span>
+                    <span className="font-mono text-slate-400">Rate: ₹{rate.toFixed(2)}/mc/hr</span>
                   </div>
                   <div className="flex items-center justify-between pt-1 border-t border-slate-800">
-                    <span className="text-xs font-bold text-slate-200">Combined Total Today:</span>
+                    <span className="text-xs font-bold text-slate-200">Total Shift Pay:</span>
+                    <strong className="text-base font-black text-amber-400 font-mono">
+                      ₹{total.toLocaleString('en-IN')}
+                    </strong>
+                  </div>
+                </div>
+              );
+            })()
+          ) : (
+            (() => {
+              const dailyRate = statusData?.worker?.dailyWage || user?.dailyWage || 1000;
+              const otH = overtimeHours ? Number(overtimeHours) : 0;
+              const otHourly = dailyRate / 12;
+              const otPay = Math.round(otH * otHourly);
+              const total = Math.round(dailyRate + otPay);
+
+              return (
+                <div className="p-3 bg-slate-900 text-white rounded-xl space-y-1">
+                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <span>Fixed Daily Wage</span>
+                    <span className="font-mono text-slate-400">Daily Rate: ₹{dailyRate.toLocaleString('en-IN')}</span>
+                  </div>
+                  {otPay > 0 && (
+                    <div className="flex items-center justify-between text-[11px] text-amber-300">
+                      <span>Overtime Pay ({otH}h):</span>
+                      <span className="font-mono">+₹{otPay.toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-800">
+                    <span className="text-xs font-bold text-slate-200">Total Shift Pay:</span>
                     <strong className="text-base font-black text-amber-400 font-mono">
                       ₹{total.toLocaleString('en-IN')}
                     </strong>
@@ -1664,21 +1725,28 @@ export const WorkerDashboard: React.FC = () => {
                 <div className="flex items-center justify-between text-xs sm:text-sm">
                   <span className="text-slate-500 font-medium">Working Hours:</span>
                   <span className="font-extrabold text-navy-950">
-                    {celebrationEarnings.hoursOperated} hrs
+                    {celebrationEarnings.hoursOperated || 12} hrs
                   </span>
                 </div>
 
-                {celebrationEarnings.wageType === 'CUSTOM' && (
+                {celebrationEarnings.wageType === 'CUSTOM' ? (
                   <div className="flex items-center justify-between text-xs sm:text-sm">
                     <span className="text-slate-500 font-medium">Looms Operated:</span>
                     <span className="font-extrabold text-navy-950">
                       {celebrationEarnings.machinesOperated} Loom(s)
                     </span>
                   </div>
+                ) : (
+                  <div className="flex items-center justify-between text-xs sm:text-sm">
+                    <span className="text-slate-500 font-medium">Wage Model:</span>
+                    <span className="font-extrabold text-navy-950">
+                      💼 Fixed Daily Wage
+                    </span>
+                  </div>
                 )}
 
                 <div className="flex items-center justify-between text-xs sm:text-sm">
-                  <span className="text-slate-500 font-medium">Base Pay:</span>
+                  <span className="text-slate-500 font-medium">Base Shift Pay:</span>
                   <span className="font-extrabold text-emerald-700">
                     ₹ {celebrationEarnings.baseEarned.toLocaleString('en-IN')}
                   </span>
@@ -1693,13 +1761,6 @@ export const WorkerDashboard: React.FC = () => {
                     <span className="font-extrabold text-amber-700">
                       + ₹ {celebrationEarnings.overtimeEarned.toLocaleString('en-IN')}
                     </span>
-                  </div>
-                )}
-
-                {celebrationEarnings.formula && (
-                  <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs">
-                    <span className="text-slate-500">Pay Formula:</span>
-                    <span className="font-mono font-bold text-slate-700">{celebrationEarnings.formula}</span>
                   </div>
                 )}
               </div>
