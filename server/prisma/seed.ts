@@ -53,34 +53,25 @@ async function main() {
   }
   console.log(`✅ Seeded ${deptMap.size} departments.`);
 
-  // 3. Shifts
+  // 3. Shifts (Day: 8:00 AM - 8:00 PM, Night: 8:00 PM - 8:00 AM)
   const shiftsData = [
     {
-      name: 'General Shift (8:30 AM - 5:30 PM)',
-      startTime: '08:30',
-      endTime: '17:30',
+      name: 'Day Shift (8:00 AM - 8:00 PM)',
+      startTime: '08:00',
+      endTime: '20:00',
       gracePeriodMinutes: 15,
       breakDurationMinutes: 60,
-      halfDayThresholdHours: 4.0,
-      fullDayThresholdHours: 8.0,
+      halfDayThresholdHours: 6.0,
+      fullDayThresholdHours: 12.0,
     },
     {
-      name: 'Day Shift (7:00 AM - 3:30 PM)',
-      startTime: '07:00',
-      endTime: '15:30',
+      name: 'Night Shift (8:00 PM - 8:00 AM)',
+      startTime: '20:00',
+      endTime: '08:00',
       gracePeriodMinutes: 15,
-      breakDurationMinutes: 30,
-      halfDayThresholdHours: 4.0,
-      fullDayThresholdHours: 8.0,
-    },
-    {
-      name: 'Night Shift (7:00 PM - 3:30 AM)',
-      startTime: '19:00',
-      endTime: '03:30',
-      gracePeriodMinutes: 15,
-      breakDurationMinutes: 30,
-      halfDayThresholdHours: 4.0,
-      fullDayThresholdHours: 8.0,
+      breakDurationMinutes: 60,
+      halfDayThresholdHours: 6.0,
+      fullDayThresholdHours: 12.0,
     },
   ];
 

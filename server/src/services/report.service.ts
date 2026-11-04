@@ -48,7 +48,14 @@ export async function getDashboardKPIs(targetDateStr?: string) {
     }),
     prisma.attendanceRecord.findMany({
       where: {
-        attendanceDate: dateStr,
+        OR: [
+          { attendanceDate: dateStr },
+          {
+            attendanceDate: getKolkataDateString(subDays(baseDate, 1)),
+            checkInAt: { not: null },
+            checkOutAt: null,
+          },
+        ],
         user: {
           role: Roles.WORKER,
           isActive: true,

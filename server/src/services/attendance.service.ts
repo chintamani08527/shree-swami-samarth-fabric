@@ -79,6 +79,27 @@ export async function processCheckIn(
     );
   }
 
+  // Check if worker has an active overnight night shift from yesterday that is still ongoing
+  const yesterday = new Date(serverNow.getTime() - 24 * 60 * 60 * 1000);
+  const yesterdayDate = getKolkataDateString(yesterday);
+  const openYesterdayRecord = await prisma.attendanceRecord.findUnique({
+    where: {
+      userId_attendanceDate: {
+        userId,
+        attendanceDate: yesterdayDate,
+      },
+    },
+  });
+
+  if (openYesterdayRecord && openYesterdayRecord.checkInAt && !openYesterdayRecord.checkOutAt) {
+    const elapsedHours = (serverNow.getTime() - openYesterdayRecord.checkInAt.getTime()) / (3600 * 1000);
+    if (elapsedHours < 18) {
+      throw new Error(
+        `Active Night Shift in progress: You checked in yesterday at ${formatKolkataTime(openYesterdayRecord.checkInAt)}. Please tap Check Out to conclude your shift.`
+      );
+    }
+  }
+
   // Determine normalized shift choice: 'DAY' or 'NIGHT'
   let normalizedShiftType: 'DAY' | 'NIGHT' = 'DAY';
   if (shiftChoice) {
@@ -86,7 +107,7 @@ export async function processCheckIn(
     if (s.includes('NIGHT') || s === 'N') normalizedShiftType = 'NIGHT';
     else normalizedShiftType = 'DAY';
   } else {
-    // Default based on current hour: after 18:00 or before 06:00 => NIGHT
+    // Default based on current hour: after 19:00 or before 07:00 => NIGHT
     const currentHour = parseInt(
       new Intl.DateTimeFormat('en-IN', {
         timeZone: 'Asia/Kolkata',
@@ -95,28 +116,29 @@ export async function processCheckIn(
       }).format(serverNow),
       10
     );
-    normalizedShiftType = (currentHour >= 18 || currentHour < 6) ? 'NIGHT' : 'DAY';
+    normalizedShiftType = (currentHour >= 19 || currentHour < 7) ? 'NIGHT' : 'DAY';
   }
 
-  // Find corresponding shift definition (or default)
-  let shift: any = user.workerShifts[0]?.shift || null;
-  if (!shift) {
-    if (normalizedShiftType === 'NIGHT') {
-      shift = (await prisma.shift.findFirst({
-        where: { name: { contains: 'Night' }, isActive: true },
-      })) || (await prisma.shift.findFirst({
-        where: { name: { contains: 'Evening' }, isActive: true },
-      }));
-    } else {
-      shift = (await prisma.shift.findFirst({
-        where: { name: { contains: 'Day' }, isActive: true },
-      })) || (await prisma.shift.findFirst({
-        where: { name: { contains: 'General' }, isActive: true },
-      }));
-    }
+  // Find corresponding shift definition (prioritize company standard 8-to-8 shifts)
+  let shift: any = null;
+  if (normalizedShiftType === 'NIGHT') {
+    shift = await prisma.shift.findFirst({
+      where: {
+        OR: [{ name: { contains: 'Night' } }, { startTime: '20:00' }],
+        isActive: true,
+      },
+    });
+  } else {
+    shift = await prisma.shift.findFirst({
+      where: {
+        OR: [{ name: { contains: 'Day' } }, { startTime: '08:00' }],
+        isActive: true,
+      },
+    });
   }
+
   if (!shift) {
-    shift = await prisma.shift.findFirst({ where: { isActive: true } });
+    shift = user.workerShifts[0]?.shift || await prisma.shift.findFirst({ where: { isActive: true } });
   }
 
   // Band timing restriction REMOVED per user instruction: workers can check in anytime for their selected shift
@@ -221,7 +243,7 @@ export async function processCheckOut(
     },
   });
 
-  // If no record found for today's date, check if there is an open overnight record from yesterday
+  // If no record found for today's date or today's record has no check-in, check if there is an active overnight record from yesterday
   if (!record || !record.checkInAt) {
     const yesterday = new Date(serverNow.getTime() - 24 * 60 * 60 * 1000);
     const yesterdayDate = getKolkataDateString(yesterday);
@@ -236,18 +258,56 @@ export async function processCheckOut(
 
     if (openYesterdayRecord && openYesterdayRecord.checkInAt && !openYesterdayRecord.checkOutAt) {
       record = openYesterdayRecord;
-    } else {
-      throw new Error('No active check-in found for today. Please tap Check In when you arrive at the factory.');
+    }
+  }
+
+  const yesterday = new Date(serverNow.getTime() - 24 * 60 * 60 * 1000);
+  const yesterdayDate = getKolkataDateString(yesterday);
+
+  // If today's record doesn't exist, has no check-in, or is already checked out: check if there's an active overnight record from yesterday
+  if (!record || !record.checkInAt || record.checkOutAt) {
+    const openYesterdayRecord = await prisma.attendanceRecord.findUnique({
+      where: {
+        userId_attendanceDate: {
+          userId,
+          attendanceDate: yesterdayDate,
+        },
+      },
+    });
+
+    if (openYesterdayRecord && openYesterdayRecord.checkInAt && !openYesterdayRecord.checkOutAt) {
+      record = openYesterdayRecord;
+    } else if (!record || !record.checkInAt) {
+      throw new Error('No active check-in found. Please tap Check In when you arrive at the factory.');
     }
   }
 
   if (record.checkOutAt) {
     throw new Error(
-      `Check-out already completed at ${formatKolkataTime(record.checkOutAt)} today. Have a restful evening!`
+      `Check-out already completed at ${formatKolkataTime(record.checkOutAt)}. Have a restful time!`
     );
   }
 
-  const shift = user.workerShifts[0]?.shift || await prisma.shift.findFirst({ where: { isActive: true } });
+  // Find corresponding shift definition (prioritize 8-to-8 Day or Night shifts)
+  let shift: any = null;
+  if (record.shiftType === 'NIGHT') {
+    shift = await prisma.shift.findFirst({
+      where: {
+        OR: [{ name: { contains: 'Night' } }, { startTime: '20:00' }],
+        isActive: true,
+      },
+    });
+  } else {
+    shift = await prisma.shift.findFirst({
+      where: {
+        OR: [{ name: { contains: 'Day' } }, { startTime: '08:00' }],
+        isActive: true,
+      },
+    });
+  }
+  if (!shift) {
+    shift = user.workerShifts[0]?.shift || await prisma.shift.findFirst({ where: { isActive: true } });
+  }
 
   // Calculate full metrics
   const calc = calculateWorkingHoursAndStatus(
@@ -355,6 +415,24 @@ export async function logCustomWageWork(
     },
   });
 
+  // If no record found for today's date or today's record has no check-in, check if there is an active overnight record from yesterday
+  if (!record || !record.checkInAt) {
+    const yesterday = new Date(serverNow.getTime() - 24 * 60 * 60 * 1000);
+    const yesterdayDate = getKolkataDateString(yesterday);
+    const openYesterdayRecord = await prisma.attendanceRecord.findUnique({
+      where: {
+        userId_attendanceDate: {
+          userId,
+          attendanceDate: yesterdayDate,
+        },
+      },
+    });
+
+    if (openYesterdayRecord && openYesterdayRecord.checkInAt && !openYesterdayRecord.checkOutAt) {
+      record = openYesterdayRecord;
+    }
+  }
+
   if (!record) {
     record = await prisma.attendanceRecord.create({
       data: {
@@ -390,11 +468,14 @@ export async function logCustomWageWork(
  * Get Worker's current status and personal summary
  */
 export async function getWorkerStatus(userId: string) {
-  const todayDate = getKolkataDateString(new Date());
+  const serverNow = new Date();
+  const todayDate = getKolkataDateString(serverNow);
+  const yesterday = new Date(serverNow.getTime() - 24 * 60 * 60 * 1000);
+  const yesterdayDate = getKolkataDateString(yesterday);
   const weekInfo = getWeekDateRange(todayDate);
 
-  // Parallelize user, today record, and weekly records lookups
-  const [user, todayRecord, weeklyRecords] = await Promise.all([
+  // Parallelize user, today record, yesterday record, and weekly records lookups
+  const [user, todayRecord, yesterdayRecord, weeklyRecords] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -414,6 +495,14 @@ export async function getWorkerStatus(userId: string) {
         },
       },
     }),
+    prisma.attendanceRecord.findUnique({
+      where: {
+        userId_attendanceDate: {
+          userId,
+          attendanceDate: yesterdayDate,
+        },
+      },
+    }),
     prisma.attendanceRecord.findMany({
       where: {
         userId,
@@ -426,21 +515,67 @@ export async function getWorkerStatus(userId: string) {
 
   if (!user) throw new Error('Worker not found');
 
-  const shift = user.workerShifts[0]?.shift || await getDefaultActiveShift();
+  // Determine active display record:
+  // If yesterday has an open overnight shift (checked in, not checked out, within 22 hrs), it represents the active ongoing shift!
+  const isYesterdayOvernightOpen = Boolean(
+    yesterdayRecord?.checkInAt &&
+    !yesterdayRecord?.checkOutAt &&
+    (serverNow.getTime() - yesterdayRecord.checkInAt.getTime()) < 22 * 60 * 60 * 1000
+  );
+
+  let activeRecord: any = null;
+  let isOvernightNightShift = false;
+
+  if (isYesterdayOvernightOpen) {
+    activeRecord = yesterdayRecord;
+    isOvernightNightShift = true;
+  } else if (todayRecord?.checkInAt) {
+    activeRecord = todayRecord;
+  } else if (
+    yesterdayRecord?.checkOutAt &&
+    (serverNow.getTime() - yesterdayRecord.checkOutAt.getTime()) < 6 * 60 * 60 * 1000 &&
+    parseInt(new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', hour12: false }).format(serverNow), 10) < 14
+  ) {
+    // Recently completed night shift this morning (within 6 hrs and before 2 PM)
+    activeRecord = yesterdayRecord;
+  } else {
+    activeRecord = todayRecord;
+  }
+
+  // Find corresponding shift definition (prioritizing 8-to-8 Day or Night shifts)
+  let shift: any = null;
+  const targetShiftType = activeRecord?.shiftType || (isOvernightNightShift ? 'NIGHT' : null);
+  if (targetShiftType === 'NIGHT') {
+    shift = await prisma.shift.findFirst({
+      where: {
+        OR: [{ name: { contains: 'Night' } }, { startTime: '20:00' }],
+        isActive: true,
+      },
+    });
+  } else if (targetShiftType === 'DAY') {
+    shift = await prisma.shift.findFirst({
+      where: {
+        OR: [{ name: { contains: 'Day' } }, { startTime: '08:00' }],
+        isActive: true,
+      },
+    });
+  }
+  if (!shift) {
+    shift = user.workerShifts[0]?.shift || await getDefaultActiveShift();
+  }
 
   // Calculate live working duration if checked in and not checked out
   let liveDurationMinutes = 0;
   let isCheckedIn = false;
   let isCheckedOut = false;
 
-  if (todayRecord?.checkInAt) {
+  if (activeRecord?.checkInAt) {
     isCheckedIn = true;
-    if (todayRecord.checkOutAt) {
+    if (activeRecord.checkOutAt) {
       isCheckedOut = true;
-      liveDurationMinutes = todayRecord.workingMinutes;
+      liveDurationMinutes = activeRecord.workingMinutes;
     } else {
-      const now = new Date();
-      const rawElapsed = Math.round((now.getTime() - todayRecord.checkInAt.getTime()) / (60 * 1000));
+      const rawElapsed = Math.round((serverNow.getTime() - activeRecord.checkInAt.getTime()) / (60 * 1000));
       // Deduct break if applicable
       const breakDed = rawElapsed >= (DEFAULT_ATTENDANCE_RULES.autoDeductBreakThresholdMinutes)
         ? (shift?.breakDurationMinutes || 60)
@@ -464,27 +599,29 @@ export async function getWorkerStatus(userId: string) {
   // Band timing removed per user instruction - checkInWindow is null (unrestricted)
   const checkInWindow = null;
 
+  const displayDate = activeRecord?.attendanceDate || todayDate;
+
   return {
     today: {
-      date: todayDate,
-      formattedDate: formatKolkataDate(todayDate),
-      dayOfWeek: getDayOfWeekName(todayDate),
+      date: displayDate,
+      formattedDate: formatKolkataDate(displayDate),
+      dayOfWeek: getDayOfWeekName(displayDate),
       isCheckedIn,
       isCheckedOut,
-      checkInAt: todayRecord?.checkInAt || null,
-      checkOutAt: todayRecord?.checkOutAt || null,
-      shiftType: todayRecord?.shiftType || null,
-      formattedCheckInTime: formatKolkataTime(todayRecord?.checkInAt),
-      formattedCheckOutTime: formatKolkataTime(todayRecord?.checkOutAt),
-      status: todayRecord?.status || (isCheckedIn ? AttendanceStatuses.PRESENT : 'NOT_MARKED'),
+      checkInAt: activeRecord?.checkInAt || null,
+      checkOutAt: activeRecord?.checkOutAt || null,
+      shiftType: activeRecord?.shiftType || (isOvernightNightShift ? 'NIGHT' : null),
+      formattedCheckInTime: formatKolkataTime(activeRecord?.checkInAt),
+      formattedCheckOutTime: formatKolkataTime(activeRecord?.checkOutAt),
+      status: activeRecord?.status || (isCheckedIn ? AttendanceStatuses.PRESENT : 'NOT_MARKED'),
       workingMinutes: liveDurationMinutes,
       workingHours: Number((liveDurationMinutes / 60).toFixed(2)),
-      breakMinutes: todayRecord?.breakMinutes || 0,
-      lateMinutes: todayRecord?.lateMinutes || 0,
-      machinesOperated: todayRecord?.machinesOperated ?? null,
-      hoursOperated: todayRecord?.hoursOperated ?? null,
-      overtimeMachines: todayRecord?.overtimeMachines ?? null,
-      overtimeHours: todayRecord?.overtimeHours ?? (todayRecord?.overtimeMinutes ? Number((todayRecord.overtimeMinutes / 60).toFixed(1)) : null),
+      breakMinutes: activeRecord?.breakMinutes || 0,
+      lateMinutes: activeRecord?.lateMinutes || 0,
+      machinesOperated: activeRecord?.machinesOperated ?? null,
+      hoursOperated: activeRecord?.hoursOperated ?? null,
+      overtimeMachines: activeRecord?.overtimeMachines ?? null,
+      overtimeHours: activeRecord?.overtimeHours ?? (activeRecord?.overtimeMinutes ? Number((activeRecord.overtimeMinutes / 60).toFixed(1)) : null),
     },
     worker: {
       wageType: user.wageType || 'FIXED',
@@ -494,11 +631,18 @@ export async function getWorkerStatus(userId: string) {
       unit: user.unit || 'Unit 1',
     },
     shift: shift ? {
-      name: todayRecord?.shiftType === 'NIGHT' ? 'Night Shift (8:00 PM - 8:00 AM)' : (shift.name || 'Day Shift (8:00 AM - 8:00 PM)'),
+      name: (activeRecord?.shiftType === 'NIGHT' || isOvernightNightShift)
+        ? 'Night Shift (8:00 PM - 8:00 AM)'
+        : (shift.name || 'Day Shift (8:00 AM - 8:00 PM)'),
       startTime: shift.startTime,
       endTime: shift.endTime,
       gracePeriodMinutes: shift.gracePeriodMinutes,
-    } : null,
+    } : {
+      name: 'Day Shift (8:00 AM - 8:00 PM)',
+      startTime: '08:00',
+      endTime: '20:00',
+      gracePeriodMinutes: 15,
+    },
     checkInWindow,
     weeklySummary: {
       startDate: weekInfo.startOfWeek,
@@ -805,10 +949,13 @@ export async function correctAttendanceRecord(
  * Get currently checked-in workers for live monitoring
  */
 export async function getCurrentlyCheckedInWorkers(departmentId?: string) {
-  const todayDate = getKolkataDateString(new Date());
+  const serverNow = new Date();
+  const todayDate = getKolkataDateString(serverNow);
+  const yesterday = new Date(serverNow.getTime() - 24 * 60 * 60 * 1000);
+  const yesterdayDate = getKolkataDateString(yesterday);
 
   const where: any = {
-    attendanceDate: todayDate,
+    attendanceDate: { in: [todayDate, yesterdayDate] },
     checkInAt: { not: null },
     checkOutAt: null,
   };

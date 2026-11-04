@@ -115,45 +115,52 @@ export async function ensureDatabaseReady() {
       console.log('✅ Updated Vinayak Ginde to SUPER_ADMIN.');
     }
 
-    // Ensure default shifts exist
-    const defaultShift = await prisma.shift.findFirst();
-    if (!defaultShift) {
-      await prisma.shift.createMany({
-        data: [
-          {
-            name: 'General Shift (8:30 AM - 5:30 PM)',
-            startTime: '08:30',
-            endTime: '17:30',
-            gracePeriodMinutes: 15,
-            breakDurationMinutes: 60,
-            halfDayThresholdHours: 4.0,
-            fullDayThresholdHours: 8.0,
-            isActive: true,
-          },
-          {
-            name: 'Day Shift (7:00 AM - 3:30 PM)',
-            startTime: '07:00',
-            endTime: '15:30',
-            gracePeriodMinutes: 15,
-            breakDurationMinutes: 30,
-            halfDayThresholdHours: 4.0,
-            fullDayThresholdHours: 8.0,
-            isActive: true,
-          },
-          {
-            name: 'Night Shift (7:00 PM - 3:30 AM)',
-            startTime: '19:00',
-            endTime: '03:30',
-            gracePeriodMinutes: 15,
-            breakDurationMinutes: 30,
-            halfDayThresholdHours: 4.0,
-            fullDayThresholdHours: 8.0,
-            isActive: true,
-          },
-        ],
-      });
-      console.log('✅ Created default Shifts.');
-    }
+    // Ensure company standard Day and Night shifts exist (8:00 AM - 8:00 PM and 8:00 PM - 8:00 AM)
+    await prisma.shift.upsert({
+      where: { name: 'Day Shift (8:00 AM - 8:00 PM)' },
+      update: {
+        startTime: '08:00',
+        endTime: '20:00',
+        gracePeriodMinutes: 15,
+        breakDurationMinutes: 60,
+        halfDayThresholdHours: 6.0,
+        fullDayThresholdHours: 12.0,
+        isActive: true,
+      },
+      create: {
+        name: 'Day Shift (8:00 AM - 8:00 PM)',
+        startTime: '08:00',
+        endTime: '20:00',
+        gracePeriodMinutes: 15,
+        breakDurationMinutes: 60,
+        halfDayThresholdHours: 6.0,
+        fullDayThresholdHours: 12.0,
+        isActive: true,
+      },
+    });
+
+    await prisma.shift.upsert({
+      where: { name: 'Night Shift (8:00 PM - 8:00 AM)' },
+      update: {
+        startTime: '20:00',
+        endTime: '08:00',
+        gracePeriodMinutes: 15,
+        breakDurationMinutes: 60,
+        halfDayThresholdHours: 6.0,
+        fullDayThresholdHours: 12.0,
+        isActive: true,
+      },
+      create: {
+        name: 'Night Shift (8:00 PM - 8:00 AM)',
+        startTime: '20:00',
+        endTime: '08:00',
+        gracePeriodMinutes: 15,
+        breakDurationMinutes: 60,
+        halfDayThresholdHours: 6.0,
+        fullDayThresholdHours: 12.0,
+        isActive: true,
+      },
+    });
 
     // Ensure default departments exist
     const defaultDept = await prisma.department.findFirst();

@@ -56,10 +56,10 @@ export const WorkerDashboard: React.FC = () => {
   const [savingOvertime, setSavingOvertime] = useState(false);
   const [overtimeSavedMessage, setOvertimeSavedMessage] = useState<string>('');
 
-  // Day Shift vs Night Shift selection (asked directly to worker)
+  // Day Shift vs Night Shift selection (asked directly to worker: 8 AM-8 PM vs 8 PM-8 AM)
   const currentHour = new Date().getHours();
   const [selectedShift, setSelectedShift] = useState<'DAY' | 'NIGHT'>(
-    (currentHour >= 18 || currentHour < 6) ? 'NIGHT' : 'DAY'
+    (currentHour >= 19 || currentHour < 7) ? 'NIGHT' : 'DAY'
   );
 
   // Check if worker has custom wage access granted by admin
@@ -329,11 +329,11 @@ export const WorkerDashboard: React.FC = () => {
               Shift:{' '}
               {statusData?.today.shiftType
                 ? statusData.today.shiftType === 'NIGHT'
-                  ? '🌙 Night Shift'
-                  : '☀️ Day Shift'
+                  ? '🌙 Night Shift (8:00 PM - 8:00 AM)'
+                  : '☀️ Day Shift (8:00 AM - 8:00 PM)'
                 : selectedShift === 'NIGHT'
-                ? '🌙 Night Shift'
-                : '☀️ Day Shift'}
+                ? '🌙 Night Shift (8:00 PM - 8:00 AM)'
+                : '☀️ Day Shift (8:00 AM - 8:00 PM)'}
             </span>
           </div>
 
@@ -498,34 +498,40 @@ export const WorkerDashboard: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setSelectedShift('DAY')}
-                        className={`py-3 px-3.5 rounded-xl text-xs sm:text-sm font-extrabold border flex items-center justify-center gap-2 transition-all tap-active ${
+                        className={`py-3 px-3 rounded-xl text-xs sm:text-sm font-extrabold border flex items-center justify-center gap-2 transition-all tap-active ${
                           selectedShift === 'DAY'
                             ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white border-orange-500 shadow-md shadow-orange-500/20 scale-[1.02]'
                             : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
                         }`}
                       >
-                        <span className="text-lg">☀️</span>
-                        <span>Day Shift</span>
+                        <span className="text-xl">☀️</span>
+                        <div className="text-left">
+                          <div>Day Shift</div>
+                          <div className="text-[10px] opacity-90 font-mono font-normal">8:00 AM - 8:00 PM</div>
+                        </div>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => setSelectedShift('NIGHT')}
-                        className={`py-3 px-3.5 rounded-xl text-xs sm:text-sm font-extrabold border flex items-center justify-center gap-2 transition-all tap-active ${
+                        className={`py-3 px-3 rounded-xl text-xs sm:text-sm font-extrabold border flex items-center justify-center gap-2 transition-all tap-active ${
                           selectedShift === 'NIGHT'
                             ? 'bg-gradient-to-r from-indigo-700 to-navy-950 text-white border-navy-950 shadow-md shadow-navy-900/30 scale-[1.02]'
                             : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
                         }`}
                       >
-                        <span className="text-lg">🌙</span>
-                        <span>Night Shift</span>
+                        <span className="text-xl">🌙</span>
+                        <div className="text-left">
+                          <div>Night Shift</div>
+                          <div className="text-[10px] opacity-90 font-mono font-normal">8:00 PM - 8:00 AM</div>
+                        </div>
                       </button>
                     </div>
 
                     <p className="text-[11px] text-slate-500 text-center font-medium">
                       Selected Shift:{' '}
                       <strong className="text-navy-950">
-                        {selectedShift === 'DAY' ? '☀️ Day Shift' : '🌙 Night Shift'}
+                        {selectedShift === 'DAY' ? '☀️ Day Shift (8:00 AM - 8:00 PM)' : '🌙 Night Shift (8:00 PM - 8:00 AM)'}
                       </strong>
                     </p>
                   </div>
@@ -533,9 +539,9 @@ export const WorkerDashboard: React.FC = () => {
 
                 {isCheckedIn && (
                   <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 flex items-center justify-between text-xs">
-                    <span className="text-slate-500 font-medium">Today's Shift:</span>
+                    <span className="text-slate-500 font-medium">Active Shift:</span>
                     <span className="font-bold text-navy-950">
-                      {statusData?.today.shiftType === 'NIGHT' ? '🌙 Night Shift' : '☀️ Day Shift'}
+                      {statusData?.today.shiftType === 'NIGHT' ? '🌙 Night Shift (8:00 PM - 8:00 AM)' : '☀️ Day Shift (8:00 AM - 8:00 PM)'}
                     </span>
                   </div>
                 )}
