@@ -94,7 +94,7 @@ export const attendanceApi = {
     } else if (options) {
       payload = { ...options };
     }
-    return request<{ success: boolean; message: string; data: any; workingHours: number }>('/attendance/check-out', {
+    return request<{ success: boolean; message: string; data: any; workingHours: number; earnings?: any }>('/attendance/check-out', {
       method: 'POST',
       body: JSON.stringify(payload),
     });

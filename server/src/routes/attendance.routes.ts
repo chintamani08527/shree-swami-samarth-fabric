@@ -85,6 +85,7 @@ router.post('/check-out', async (req: Request, res: Response) => {
       hoursOperated: result.hoursOperated,
       overtimeMachines: result.overtimeMachines,
       overtimeHours: result.overtimeHours,
+      earnings: result.earnings,
     });
   } catch (error: any) {
     res.status(400).json({

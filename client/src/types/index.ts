@@ -95,6 +95,22 @@ export interface AttendanceRecord {
   overtimeHours?: number | null;
 }
 
+export interface ShiftEarnings {
+  totalEarned: number;
+  baseEarned: number;
+  overtimeEarned: number;
+  wageType: 'FIXED' | 'CUSTOM' | string;
+  customRate?: number;
+  dailyWage?: number;
+  machinesOperated: number;
+  hoursOperated: number;
+  overtimeMachines: number;
+  overtimeHours: number;
+  shiftType: string;
+  status: string;
+  formula: string;
+}
+
 export interface WorkerTodayStatus {
   today: {
     date: string;
@@ -116,6 +132,7 @@ export interface WorkerTodayStatus {
     hoursOperated?: number | null;
     overtimeMachines?: number | null;
     overtimeHours?: number | null;
+    earnings?: ShiftEarnings | null;
   };
   worker?: {
     wageType: 'FIXED' | 'CUSTOM';

@@ -27,7 +27,7 @@ import { WorkerBottomNav } from '../../components/layout/WorkerBottomNav.tsx';
 import { useAuth } from '../../context/AuthContext.tsx';
 import { useToast } from '../../context/ToastContext.tsx';
 import { attendanceApi } from '../../services/api.ts';
-import { WorkerTodayStatus } from '../../types/index.ts';
+import { WorkerTodayStatus, ShiftEarnings } from '../../types/index.ts';
 
 export const WorkerDashboard: React.FC = () => {
   const { user, logout } = useAuth();
@@ -39,6 +39,11 @@ export const WorkerDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [activeTimerSeconds, setActiveTimerSeconds] = useState<number>(0);
+
+  // Check-Out Celebration & Rupees Animation state
+  const [showCelebrationModal, setShowCelebrationModal] = useState(false);
+  const [celebrationEarnings, setCelebrationEarnings] = useState<ShiftEarnings | null>(null);
+  const [animatedRupees, setAnimatedRupees] = useState<number>(0);
 
   // Custom wage & machine logging state
   const [customWageModalOpen, setCustomWageModalOpen] = useState(false);
@@ -173,6 +178,111 @@ export const WorkerDashboard: React.FC = () => {
     setCheckOutPromptOpen(true);
   };
 
+  // Web Audio API Celebratory Chime
+  const playCelebrationChime = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+
+      // Uplifting celebratory chime progression: C5 -> E5 -> G5 -> C6
+      const notes = [523.25, 659.25, 783.99, 1046.50];
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.12);
+
+        gain.gain.setValueAtTime(0, ctx.currentTime + idx * 0.12);
+        gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + idx * 0.12 + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.12 + 0.6);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(ctx.currentTime + idx * 0.12);
+        osc.stop(ctx.currentTime + idx * 0.12 + 0.65);
+      });
+    } catch {}
+  };
+
+  // Multi-Cannon Colorful Confetti Explosion
+  const triggerMultiConfetti = () => {
+    try {
+      confetti({
+        particleCount: 80,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#F59E0B', '#10B981', '#3B82F6', '#EC4899', '#8B5CF6'],
+      });
+      setTimeout(() => {
+        confetti({
+          particleCount: 50,
+          angle: 60,
+          spread: 55,
+          origin: { x: 0, y: 0.7 },
+          colors: ['#F59E0B', '#FBBF24', '#10B981', '#34D399'],
+        });
+      }, 200);
+      setTimeout(() => {
+        confetti({
+          particleCount: 50,
+          angle: 120,
+          spread: 55,
+          origin: { x: 1, y: 0.7 },
+          colors: ['#F59E0B', '#FBBF24', '#10B981', '#34D399'],
+        });
+      }, 400);
+    } catch {}
+  };
+
+  // Trigger celebration modal with animated counter, chime & confetti
+  const triggerCelebration = (earnings: ShiftEarnings) => {
+    setCelebrationEarnings(earnings);
+    setShowCelebrationModal(true);
+    playCelebrationChime();
+    triggerMultiConfetti();
+    if (navigator && typeof navigator.vibrate === 'function') {
+      try {
+        navigator.vibrate([100, 50, 100, 50, 200]);
+      } catch {}
+    }
+  };
+
+  // Animated Rupee Count-Up from 0 to totalEarned
+  useEffect(() => {
+    if (!showCelebrationModal || !celebrationEarnings) {
+      setAnimatedRupees(0);
+      return;
+    }
+
+    const target = celebrationEarnings.totalEarned || 0;
+    if (target <= 0) {
+      setAnimatedRupees(0);
+      return;
+    }
+
+    const duration = 1200; // ms
+    const startTime = performance.now();
+
+    let animationFrameId: number;
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      // Ease out cubic
+      const easedProgress = 1 - Math.pow(1 - progress, 3);
+      const currentVal = Math.round(easedProgress * target);
+      setAnimatedRupees(currentVal);
+
+      if (progress < 1) {
+        animationFrameId = requestAnimationFrame(animate);
+      }
+    };
+
+    animationFrameId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [showCelebrationModal, celebrationEarnings]);
+
   // Direct Check Out handler (fallback)
   const handleDirectCheckOut = async () => {
     try {
@@ -180,6 +290,9 @@ export const WorkerDashboard: React.FC = () => {
       const res = await attendanceApi.checkOut();
       if (res.success) {
         showToast(res.message, 'success');
+        if (res.earnings) {
+          triggerCelebration(res.earnings);
+        }
         await loadData();
       }
     } catch (err: any) {
@@ -205,6 +318,9 @@ export const WorkerDashboard: React.FC = () => {
       if (res.success) {
         showToast(res.message, 'success');
         setCheckOutPromptOpen(false);
+        if (res.earnings) {
+          triggerCelebration(res.earnings);
+        }
         await loadData();
       }
     } catch (err: any) {
@@ -577,9 +693,75 @@ export const WorkerDashboard: React.FC = () => {
                     )}
                   </button>
                 ) : (
-                  <div className="w-full py-3.5 px-4 rounded-xl bg-slate-100 text-slate-500 font-bold text-center text-sm border border-slate-200 flex items-center justify-center gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                    <span>Today's Attendance Fully Recorded</span>
+                  <div className="space-y-3">
+                    <div className="w-full py-3 px-4 rounded-xl bg-slate-100 text-slate-600 font-bold text-center text-xs sm:text-sm border border-slate-200 flex items-center justify-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600" />
+                      <span>Shift Completed & Attendance Recorded</span>
+                    </div>
+
+                    {/* Persistent Today's Shift Earnings Card */}
+                    <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/15 via-emerald-500/10 to-teal-500/15 border-2 border-amber-300/80 shadow-md">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-400 text-white font-black text-2xl flex items-center justify-center shadow-lg shadow-amber-500/30 flex-shrink-0">
+                            ₹
+                          </div>
+                          <div>
+                            <div className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
+                              Today's Shift Earnings • आजची कमाई
+                            </div>
+                            <div className="text-2xl sm:text-3xl font-black text-navy-950 flex items-center gap-2">
+                              <span>₹ {(statusData?.today?.earnings?.totalEarned ?? 0).toLocaleString('en-IN')}</span>
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full uppercase tracking-wide">
+                                Verified
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (statusData?.today?.earnings) {
+                              triggerCelebration(statusData.today.earnings);
+                            } else {
+                              const hours = statusData?.today?.workingHours || 12;
+                              const isCustom = statusData?.worker?.wageType === 'CUSTOM' || Boolean(statusData?.worker?.hasCustomWageAccess);
+                              const rate = statusData?.worker?.customWageRate || 29.17;
+                              const daily = statusData?.worker?.dailyWage || 500;
+                              const m = statusData?.today?.machinesOperated || 1;
+                              const base = isCustom ? Math.round(m * hours * rate) : daily;
+                              triggerCelebration({
+                                totalEarned: base,
+                                baseEarned: base,
+                                overtimeEarned: 0,
+                                wageType: isCustom ? 'CUSTOM' : 'FIXED',
+                                machinesOperated: m,
+                                hoursOperated: hours,
+                                overtimeMachines: 0,
+                                overtimeHours: 0,
+                                shiftType: statusData?.today?.shiftType || 'DAY',
+                                status: statusData?.today?.status || 'PRESENT',
+                                formula: isCustom ? `${m} Looms × ${hours}h @ ₹${rate}/loom/h` : `Daily Wage ₹${daily}`,
+                              });
+                            }
+                          }}
+                          className="py-2.5 px-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-xs shadow-md shadow-amber-500/25 transition-all flex items-center gap-1.5 tap-active flex-shrink-0"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>Celebration 🎉</span>
+                        </button>
+                      </div>
+
+                      {statusData?.today?.earnings?.formula && (
+                        <div className="mt-3 pt-2.5 border-t border-amber-200/60 flex items-center justify-between text-xs text-slate-600">
+                          <span className="font-medium text-slate-500">Pay Breakdown:</span>
+                          <span className="font-semibold text-navy-950 font-mono text-[11px] sm:text-xs">
+                            {statusData.today.earnings.formula}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1428,6 +1610,132 @@ export const WorkerDashboard: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* 🎊 Check-Out Earnings Celebration Modal */}
+      {showCelebrationModal && celebrationEarnings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-amber-200/80 transform transition-all scale-100">
+            {/* Top Celebratory Header with Gradient */}
+            <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 p-6 text-white text-center relative overflow-hidden">
+              <div className="inline-block py-1 px-3.5 rounded-full bg-white/20 backdrop-blur-md text-[11px] font-extrabold tracking-widest text-white uppercase mb-2 shadow-sm border border-white/30">
+                ॥ श्री स्वामी समर्थ ॥
+              </div>
+
+              <h2 className="text-xl sm:text-2xl font-black tracking-tight drop-shadow-sm">
+                Shift Completed! 🎉
+              </h2>
+              <p className="text-xs sm:text-sm text-amber-100 font-medium mt-0.5">
+                उत्कृष्ट काम केले! आजची विश्रांती घ्या.
+              </p>
+
+              {/* Bouncing Gold Rupee Coin */}
+              <div className="mt-4 flex justify-center">
+                <div className="relative">
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-yellow-300 via-amber-400 to-yellow-200 text-amber-950 font-black text-4xl flex items-center justify-center shadow-2xl shadow-yellow-500/50 border-4 border-white animate-bounce">
+                    ₹
+                  </div>
+                  <div className="absolute -top-1 -right-1 text-2xl animate-pulse text-yellow-200">
+                    ✨
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Earnings Total and Breakdown */}
+            <div className="p-6 space-y-5 text-center">
+              <div>
+                <span className="text-xs font-extrabold uppercase tracking-widest text-slate-400">
+                  Total Shift Earnings • आजची एकूण कमाई
+                </span>
+                <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-emerald-600 to-teal-700 tracking-tight mt-1">
+                  ₹ {animatedRupees.toLocaleString('en-IN')}
+                </div>
+              </div>
+
+              {/* Shift Specs Pill Grid */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 text-left space-y-2.5">
+                <div className="flex items-center justify-between text-xs sm:text-sm">
+                  <span className="text-slate-500 font-medium">Shift Type:</span>
+                  <span className="font-extrabold text-navy-950">
+                    {celebrationEarnings.shiftType === 'NIGHT' ? '🌙 Night Shift (8 PM - 8 AM)' : '☀️ Day Shift (8 AM - 8 PM)'}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs sm:text-sm">
+                  <span className="text-slate-500 font-medium">Working Hours:</span>
+                  <span className="font-extrabold text-navy-950">
+                    {celebrationEarnings.hoursOperated} hrs
+                  </span>
+                </div>
+
+                {celebrationEarnings.wageType === 'CUSTOM' && (
+                  <div className="flex items-center justify-between text-xs sm:text-sm">
+                    <span className="text-slate-500 font-medium">Looms Operated:</span>
+                    <span className="font-extrabold text-navy-950">
+                      {celebrationEarnings.machinesOperated} Loom(s)
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between text-xs sm:text-sm">
+                  <span className="text-slate-500 font-medium">Base Pay:</span>
+                  <span className="font-extrabold text-emerald-700">
+                    ₹ {celebrationEarnings.baseEarned.toLocaleString('en-IN')}
+                  </span>
+                </div>
+
+                {celebrationEarnings.overtimeEarned > 0 && (
+                  <div className="flex items-center justify-between text-xs sm:text-sm">
+                    <span className="text-amber-700 font-medium flex items-center gap-1">
+                      <Zap className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Overtime Pay ({celebrationEarnings.overtimeHours}h):</span>
+                    </span>
+                    <span className="font-extrabold text-amber-700">
+                      + ₹ {celebrationEarnings.overtimeEarned.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                )}
+
+                {celebrationEarnings.formula && (
+                  <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs">
+                    <span className="text-slate-500">Pay Formula:</span>
+                    <span className="font-mono font-bold text-slate-700">{celebrationEarnings.formula}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Blessing Quote */}
+              <div className="py-2 px-3 rounded-xl bg-amber-50 text-amber-900 border border-amber-200/70 text-xs font-semibold">
+                ॥ अशक्य ही शक्य करतील स्वामी ॥
+              </div>
+
+              {/* Action Buttons */}
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    playCelebrationChime();
+                    triggerMultiConfetti();
+                  }}
+                  className="py-3 px-4 rounded-xl border border-amber-300 text-amber-800 hover:bg-amber-50 font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 tap-active"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-600" />
+                  <span>Replay Confetti 🎊</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowCelebrationModal(false)}
+                  className="py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs sm:text-sm shadow-md shadow-emerald-600/30 transition-all tap-active flex items-center justify-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Done / ठीक आहे</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Worker Mobile Bottom Navigation */}
       <WorkerBottomNav currentTab={currentTab} onSelectTab={(tab: any) => setCurrentTab(tab)} />
