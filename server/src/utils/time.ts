@@ -143,6 +143,7 @@ export function getYearDateRange(yearRef?: number | string) {
 }
 
 export interface ShiftInfo {
+  name?: string;
   startTime: string; // "08:30"
   endTime: string;   // "17:30"
   gracePeriodMinutes?: number;
@@ -180,12 +181,27 @@ export function calculateWorkingHoursAndStatus(
   const fullDayHours = shift?.fullDayThresholdHours ?? rules.fullDayThresholdHours;
 
   // Calculate late arrival
+  // Factory Rule: check-in after 9:00 AM in the morning or after 9:00 PM (21:00) in the evening receives a LATE mark!
   const expectedCheckInDate = parseKolkataTimeString(shiftStartTime, dateStr);
-  const graceCheckInDate = new Date(expectedCheckInDate.getTime() + graceMinutes * 60 * 1000);
+
+  const isNightShift = shiftStartTime.startsWith('20') || shiftStartTime.startsWith('19') || shiftStartTime.startsWith('21') || Boolean(shift?.name && shift.name.toLowerCase().includes('night'));
+  const isDayShift = shiftStartTime.startsWith('08') || shiftStartTime.startsWith('07') || shiftStartTime.startsWith('09') || Boolean(shift?.name && shift.name.toLowerCase().includes('day'));
+
+  let lateCutoffDate: Date;
+  if (isNightShift) {
+    // Evening Shift late cutoff: 09:00 PM (21:00 IST)
+    lateCutoffDate = parseKolkataTimeString('21:00', dateStr);
+  } else if (isDayShift) {
+    // Morning Shift late cutoff: 09:00 AM (09:00 IST)
+    lateCutoffDate = parseKolkataTimeString('09:00', dateStr);
+  } else {
+    // Custom / other shift: use expected start + grace minutes
+    lateCutoffDate = new Date(expectedCheckInDate.getTime() + graceMinutes * 60 * 1000);
+  }
 
   let lateMinutes = 0;
-  if (checkInAt.getTime() > graceCheckInDate.getTime()) {
-    lateMinutes = Math.round((checkInAt.getTime() - expectedCheckInDate.getTime()) / (60 * 1000));
+  if (checkInAt.getTime() > lateCutoffDate.getTime()) {
+    lateMinutes = Math.max(1, Math.round((checkInAt.getTime() - expectedCheckInDate.getTime()) / (60 * 1000)));
   }
 
   // If not checked out yet:
@@ -241,7 +257,7 @@ export function calculateWorkingHoursAndStatus(
   if (workingHours < halfDayHours) {
     status = AttendanceStatuses.HALF_DAY;
   } else if (workingHours < fullDayHours) {
-    status = AttendanceStatuses.HALF_DAY;
+    status = lateMinutes > 0 ? AttendanceStatuses.LATE : AttendanceStatuses.HALF_DAY;
   } else {
     status = lateMinutes > 0 ? AttendanceStatuses.LATE : AttendanceStatuses.PRESENT;
   }

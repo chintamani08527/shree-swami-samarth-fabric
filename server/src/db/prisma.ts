@@ -80,7 +80,9 @@ export async function ensureDatabaseReady() {
           timezone: 'Asia/Kolkata',
           defaultWorkingHours: 8.0,
           attendanceRules: JSON.stringify({
-            gracePeriodMinutes: 15,
+            gracePeriodMinutes: 60,
+            morningLateCutoff: '09:00',
+            eveningLateCutoff: '21:00',
             breakDurationMinutes: 60,
             autoDeductBreakThresholdMinutes: 300,
             halfDayThresholdHours: 4.0,
@@ -120,25 +122,26 @@ export async function ensureDatabaseReady() {
     }
 
     // Ensure company standard Day and Night shifts exist (8:00 AM - 8:00 PM and 8:00 PM - 8:00 AM)
+    // Factory Late Mark Policy: check-ins after 9:00 AM (Day) or 9:00 PM (Night) receive a Late Mark (60 min grace)
     await prisma.shift.upsert({
       where: { name: 'Day Shift (8:00 AM - 8:00 PM)' },
       update: {
         startTime: '08:00',
         endTime: '20:00',
-        gracePeriodMinutes: 15,
+        gracePeriodMinutes: 60,
         breakDurationMinutes: 60,
-        halfDayThresholdHours: 6.0,
-        fullDayThresholdHours: 12.0,
+        halfDayThresholdHours: 4.0,
+        fullDayThresholdHours: 8.0,
         isActive: true,
       },
       create: {
         name: 'Day Shift (8:00 AM - 8:00 PM)',
         startTime: '08:00',
         endTime: '20:00',
-        gracePeriodMinutes: 15,
+        gracePeriodMinutes: 60,
         breakDurationMinutes: 60,
-        halfDayThresholdHours: 6.0,
-        fullDayThresholdHours: 12.0,
+        halfDayThresholdHours: 4.0,
+        fullDayThresholdHours: 8.0,
         isActive: true,
       },
     });
@@ -148,20 +151,20 @@ export async function ensureDatabaseReady() {
       update: {
         startTime: '20:00',
         endTime: '08:00',
-        gracePeriodMinutes: 15,
+        gracePeriodMinutes: 60,
         breakDurationMinutes: 60,
-        halfDayThresholdHours: 6.0,
-        fullDayThresholdHours: 12.0,
+        halfDayThresholdHours: 4.0,
+        fullDayThresholdHours: 8.0,
         isActive: true,
       },
       create: {
         name: 'Night Shift (8:00 PM - 8:00 AM)',
         startTime: '20:00',
         endTime: '08:00',
-        gracePeriodMinutes: 15,
+        gracePeriodMinutes: 60,
         breakDurationMinutes: 60,
-        halfDayThresholdHours: 6.0,
-        fullDayThresholdHours: 12.0,
+        halfDayThresholdHours: 4.0,
+        fullDayThresholdHours: 8.0,
         isActive: true,
       },
     });

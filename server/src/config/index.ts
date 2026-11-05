@@ -43,7 +43,9 @@ export type AttendanceSourceType = typeof AttendanceSources[keyof typeof Attenda
 
 export const DEFAULT_ATTENDANCE_RULES = {
   checkInBandMinutes: 30, // 30 minutes band time: workers can check in within 30 min before or after shift start
-  gracePeriodMinutes: 15,
+  gracePeriodMinutes: 60, // 60 minutes grace: up to 9:00 AM (morning) and 9:00 PM (evening)
+  morningLateCutoff: '09:00', // After 9:00 AM in morning => LATE mark
+  eveningLateCutoff: '21:00', // After 9:00 PM (21:00) in evening => LATE mark
   breakDurationMinutes: 60,
   autoDeductBreakThresholdMinutes: 300, // 5 hours minimum for break deduction
   halfDayThresholdHours: 4.0,

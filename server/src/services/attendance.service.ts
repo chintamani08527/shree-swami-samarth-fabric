@@ -334,6 +334,10 @@ export async function processCheckIn(
   }
 
   const shiftLabel = normalizedShiftType === 'NIGHT' ? 'Night Shift 🌙' : 'Day Shift ☀️';
+  const isLate = record.status === AttendanceStatuses.LATE || calc.status === AttendanceStatuses.LATE;
+  const lateNote = isLate
+    ? ` ⚠️ उशिरा नोंद (Late Mark: ${record.lateMinutes || calc.lateMinutes} मिनिटे उशीर - कटऑफ: ${normalizedShiftType === 'NIGHT' ? '9:00 PM' : '9:00 AM'})`
+    : '';
 
   return {
     record,
@@ -342,7 +346,7 @@ export async function processCheckIn(
       workerId: user.workerId,
       name: user.name,
     },
-    message: `Namaste ${user.name}! ${shiftLabel} check-in recorded at ${formatKolkataTime(serverNow)}.`,
+    message: `Namaste ${user.name}! ${shiftLabel} check-in recorded at ${formatKolkataTime(serverNow)}.${lateNote}`,
   };
 }
 
@@ -967,7 +971,7 @@ export async function getWorkerStatus(userId: string) {
       name: 'Day Shift (8:00 AM - 8:00 PM)',
       startTime: '08:00',
       endTime: '20:00',
-      gracePeriodMinutes: 15,
+      gracePeriodMinutes: 60,
     },
     checkInWindow,
     weeklySummary: {
