@@ -42,8 +42,15 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.os.Looper
 import android.provider.Settings
 import android.webkit.GeolocationPermissions
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import org.json.JSONObject
 import java.io.File
 
@@ -52,6 +59,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var swipeRefreshLayout: SwipeRefreshLayout
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private var locationCallback: LocationCallback? = null
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
     private var backPressedTime: Long = 0
 
@@ -175,6 +184,8 @@ class MainActivity : ComponentActivity() {
         rootLayout.addView(progressBar)
         setContentView(rootLayout)
 
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
         setupWebSettings()
         setupClients()
         setupDownloadListener()
@@ -209,35 +220,76 @@ class MainActivity : ComponentActivity() {
             val coarse = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
             if (!fine && !coarse) return
 
-            val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
-
-            val gpsLoc = try { lm.getLastKnownLocation(LocationManager.GPS_PROVIDER) } catch (_: Exception) { null }
-            val netLoc = try { lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) } catch (_: Exception) { null }
-            val passiveLoc = try { lm.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER) } catch (_: Exception) { null }
-
-            val candidates = listOfNotNull(gpsLoc, netLoc, passiveLoc)
-            val best = candidates.maxByOrNull { it.time }
-            if (best != null) {
-                latestLocation = best
-            }
-
-            if (locationListener == null) {
-                locationListener = object : LocationListener {
-                    override fun onLocationChanged(location: Location) {
-                        latestLocation = location
+            // 1. Google Play Services Fused Location Provider (Pinpoint GPS, Cell, Wi-Fi fusion)
+            try {
+                fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
+                    if (loc != null) {
+                        if (latestLocation == null || loc.time >= latestLocation!!.time) {
+                            latestLocation = loc
+                        }
                     }
-                    override fun onProviderEnabled(provider: String) {}
-                    override fun onProviderDisabled(provider: String) {}
-                    @Deprecated("Deprecated in Java")
-                    override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
                 }
+
+                fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                    .addOnSuccessListener { loc ->
+                        if (loc != null) {
+                            latestLocation = loc
+                        }
+                    }
+
+                if (locationCallback == null) {
+                    locationCallback = object : LocationCallback() {
+                        override fun onLocationResult(result: LocationResult) {
+                            val loc = result.lastLocation ?: return
+                            if (latestLocation == null || loc.time >= latestLocation!!.time || (loc.hasAccuracy() && loc.accuracy < (latestLocation?.accuracy ?: 999f))) {
+                                latestLocation = loc
+                            }
+                        }
+                    }
+                }
+
+                val req = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L)
+                    .setMinUpdateIntervalMillis(500L)
+                    .setMinUpdateDistanceMeters(0f)
+                    .setWaitForAccurateLocation(true)
+                    .build()
+
+                fusedLocationClient.requestLocationUpdates(req, locationCallback!!, Looper.getMainLooper())
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
 
-            if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2000L, 1.0f, locationListener!!)
-            }
-            if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 2000L, 1.0f, locationListener!!)
+            // 2. Native Hardware LocationManager fallback
+            val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+            if (lm != null) {
+                val gpsLoc = try { lm.getLastKnownLocation(LocationManager.GPS_PROVIDER) } catch (_: Exception) { null }
+                val netLoc = try { lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) } catch (_: Exception) { null }
+                val candidates = listOfNotNull(latestLocation, gpsLoc, netLoc)
+                val best = candidates.maxByOrNull { it.time }
+                if (best != null) {
+                    latestLocation = best
+                }
+
+                if (locationListener == null) {
+                    locationListener = object : LocationListener {
+                        override fun onLocationChanged(loc: Location) {
+                            if (latestLocation == null || loc.time >= latestLocation!!.time || (loc.hasAccuracy() && loc.accuracy < (latestLocation?.accuracy ?: 999f))) {
+                                latestLocation = loc
+                            }
+                        }
+                        override fun onProviderEnabled(provider: String) {}
+                        override fun onProviderDisabled(provider: String) {}
+                        @Deprecated("Deprecated in Java")
+                        override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+                    }
+                }
+
+                if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                    lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, locationListener!!, Looper.getMainLooper())
+                }
+                if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                    lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1000L, 0f, locationListener!!, Looper.getMainLooper())
+                }
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -251,6 +303,8 @@ class MainActivity : ComponentActivity() {
             domStorageEnabled = true
             databaseEnabled = true
             setGeolocationEnabled(true)
+            @Suppress("DEPRECATION")
+            setGeolocationDatabasePath(filesDir.path)
             useWideViewPort = true
             loadWithOverviewMode = true
             allowFileAccess = true
@@ -494,10 +548,13 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        locationListener?.let {
-            val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-            try { lm?.removeUpdates(it) } catch (_: Exception) {}
-        }
+        try {
+            locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
+            locationListener?.let {
+                val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+                lm?.removeUpdates(it)
+            }
+        } catch (_: Exception) {}
         webView.destroy()
         super.onDestroy()
     }
@@ -512,6 +569,13 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun isNativeApp(): Boolean {
             return true
+        }
+
+        @JavascriptInterface
+        fun startTrackingHighAccuracyLocation() {
+            runOnUiThread {
+                startLocationUpdates()
+            }
         }
 
         @JavascriptInterface
@@ -562,20 +626,23 @@ class MainActivity : ComponentActivity() {
                     return ""
                 }
 
-                val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return ""
+                val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
 
-                val gpsLoc = try { lm.getLastKnownLocation(LocationManager.GPS_PROVIDER) } catch (_: Exception) { null }
-                val netLoc = try { lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) } catch (_: Exception) { null }
-                val passiveLoc = try { lm.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER) } catch (_: Exception) { null }
+                val gpsLoc = try { lm?.getLastKnownLocation(LocationManager.GPS_PROVIDER) } catch (_: Exception) { null }
+                val netLoc = try { lm?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) } catch (_: Exception) { null }
+                val passiveLoc = try { lm?.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER) } catch (_: Exception) { null }
 
                 val candidates = listOfNotNull(latestLocation, gpsLoc, netLoc, passiveLoc)
-                val best = candidates.maxByOrNull { it.time }
+                val freshCandidates = candidates.filter { (System.currentTimeMillis() - it.time) < 180000 }
+                val targetList = if (freshCandidates.isNotEmpty()) freshCandidates else candidates
+
+                val best = targetList.minByOrNull { if (it.hasAccuracy()) it.accuracy else 999f } ?: targetList.maxByOrNull { it.time }
 
                 if (best != null) {
                     val json = JSONObject()
                     json.put("latitude", best.latitude)
                     json.put("longitude", best.longitude)
-                    json.put("accuracy", if (best.hasAccuracy()) best.accuracy.toDouble() else 15.0)
+                    json.put("accuracy", if (best.hasAccuracy()) best.accuracy.toDouble() else 8.0)
                     json.put("timestamp", best.time)
                     return json.toString()
                 }

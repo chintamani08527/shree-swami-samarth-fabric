@@ -53,6 +53,7 @@ dependencies {
   implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.activity.compose)
   implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
+  implementation("com.google.android.gms:play-services-location:21.3.0")
 
   // Arch Components
   implementation(libs.androidx.lifecycle.runtime.compose)

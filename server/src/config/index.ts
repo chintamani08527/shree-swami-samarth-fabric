@@ -52,7 +52,7 @@ export const DEFAULT_ATTENDANCE_RULES = {
   dailyCutoffTime: '23:59', // cutoff for marking missing checkout
   // Factory Geofencing configuration (Unit 1 & Unit 2)
   geofencingEnabled: true,
-  geofenceRadiusMeters: 100, // 100 meter boundary around factory units
+  geofenceRadiusMeters: 400, // 400 meter boundary around factory units
   unit1Name: 'Unit 1',
   unit1Lat: 16.432500, // 16°25'57.0"N
   unit1Lng: 74.384222, // 74°23'03.2"E

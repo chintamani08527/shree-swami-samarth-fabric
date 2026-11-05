@@ -24,7 +24,7 @@ export const SettingsPage: React.FC = () => {
 
   // Factory Geofencing & Map Coordinates (Unit 1 & Unit 2)
   const [geofencingEnabled, setGeofencingEnabled] = useState(true);
-  const [geofenceRadius, setGeofenceRadius] = useState(100);
+  const [geofenceRadius, setGeofenceRadius] = useState(400);
   const [unit1Name, setUnit1Name] = useState('Unit 1');
   const [unit1Lat, setUnit1Lat] = useState('16.432500');
   const [unit1Lng, setUnit1Lng] = useState('74.384222');

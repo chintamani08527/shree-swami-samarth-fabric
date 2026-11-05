@@ -18,7 +18,7 @@ async function main() {
   const updatedRules = {
     ...rules,
     geofencingEnabled: true,
-    geofenceRadiusMeters: 100,
+    geofenceRadiusMeters: 400,
     unit1Name: 'Unit 1',
     unit1Lat: 16.432500,
     unit1Lng: 74.384222,

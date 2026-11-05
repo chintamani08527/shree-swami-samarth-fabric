@@ -10,6 +10,7 @@ declare global {
       requestLocationPermission?: () => void;
       isLocationServiceEnabled?: () => boolean;
       openLocationSettings?: () => void;
+      startTrackingHighAccuracyLocation?: () => void;
       getNativeGPSLocation?: () => string;
       showToast?: (msg: string) => void;
       triggerHaptic?: () => void;
@@ -108,7 +109,7 @@ function tryGetNativeLocation(): GPSPosition | null {
           return {
             latitude: parsed.latitude,
             longitude: parsed.longitude,
-            accuracy: parsed.accuracy || 15,
+            accuracy: parsed.accuracy || 8,
             timestamp: parsed.timestamp || Date.now(),
           };
         }
@@ -121,10 +122,10 @@ function tryGetNativeLocation(): GPSPosition | null {
 }
 
 /**
- * Acquire worker's high-accuracy GPS position with native Android bridge fallback
+ * Acquire worker's high-accuracy GPS position with native Android bridge polling
  */
-export async function getCurrentGPSPosition(timeoutMs: number = 10000): Promise<GPSPosition> {
-  // 1. If running in Android App, check native bridge first
+export async function getCurrentGPSPosition(timeoutMs: number = 15000): Promise<GPSPosition> {
+  // 1. If running in Android App, use native high-accuracy bridge
   if (typeof window !== 'undefined' && window.AndroidBridge) {
     const bridge = window.AndroidBridge;
 
@@ -139,10 +140,35 @@ export async function getCurrentGPSPosition(timeoutMs: number = 10000): Promise<
       throw new Error('कृपया मोबाईलचे GPS (Location) सेटिंग्जमध्ये चालू करा (Please enable GPS in phone settings).');
     }
 
-    // Read native location if available
-    const nativePos = tryGetNativeLocation();
-    if (nativePos) {
-      return nativePos;
+    // Command Android to start high-accuracy GPS tracking
+    bridge.startTrackingHighAccuracyLocation?.();
+
+    // Check immediate cache first
+    const immediate = tryGetNativeLocation();
+    if (immediate && immediate.accuracy <= 40) {
+      return immediate;
+    }
+
+    // Actively poll native GPS for up to 8 seconds to allow hardware satellite lock
+    const startTime = Date.now();
+    let bestFix: GPSPosition | null = immediate;
+
+    while (Date.now() - startTime < 8000) {
+      const fix = tryGetNativeLocation();
+      if (fix) {
+        if (!bestFix || (fix.accuracy && fix.accuracy < bestFix.accuracy)) {
+          bestFix = fix;
+        }
+        // If accuracy is high (within 25 meters), return immediately
+        if (fix.accuracy <= 25) {
+          return fix;
+        }
+      }
+      await new Promise((r) => setTimeout(r, 400));
+    }
+
+    if (bestFix) {
+      return bestFix;
     }
   }
 
@@ -189,7 +215,7 @@ export async function getCurrentGPSPosition(timeoutMs: number = 10000): Promise<
     // Attempt second browser query with lower accuracy for cellular/wifi positioning
     if (err.code === 2 || err.code === 3) {
       try {
-        return await queryBrowserLocation(false, 6000);
+        return await queryBrowserLocation(false, 8000);
       } catch (_e) {
         // Fallback failed
       }
@@ -204,7 +230,7 @@ export async function getCurrentGPSPosition(timeoutMs: number = 10000): Promise<
         msg = 'GPS सिग्नल उपलब्ध नाही (GPS signal unavailable). कृपया उघड्या जागेत जाऊन पुन्हा प्रयत्न करा.';
         break;
       case 3: // TIMEOUT
-        msg = 'लोकेशन मिळण्यास उशीर झाला (Location timeout). कृपया पुन्हा प्रयत्न करा.';
+        msg = 'लोकेशन मिळण्यास उशीर झाला (Location timeout). कृपया पुन्हा रिफ्रेश बटण दाबा.';
         break;
     }
     throw new Error(msg);

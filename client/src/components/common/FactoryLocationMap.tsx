@@ -45,7 +45,7 @@ export const FactoryLocationMap: React.FC<FactoryLocationMapProps> = ({
     longitude: 74.441361,
   };
 
-  const radiusMeters = geofenceConfig?.radiusMeters || 100;
+  const radiusMeters = geofenceConfig?.radiusMeters || 400;
 
   // Initialize and update Leaflet Map
   useEffect(() => {
