@@ -4,6 +4,7 @@ import { settingsApi } from '../../services/api.ts';
 import { CompanySettingsData, Shift } from '../../types/index.ts';
 import { Modal } from '../../components/common/Modal.tsx';
 import { useToast } from '../../context/ToastContext.tsx';
+import { getCurrentGPSPosition } from '../../utils/geo.ts';
 
 export const SettingsPage: React.FC = () => {
   const { showToast } = useToast();
@@ -78,31 +79,24 @@ export const SettingsPage: React.FC = () => {
     loadSettings();
   }, []);
 
-  const handleGetDeviceLocation = (target: 'unit1' | 'unit2') => {
-    if (!navigator.geolocation) {
-      showToast('Geolocation is not supported by your browser', 'error');
-      return;
-    }
+  const handleGetDeviceLocation = async (target: 'unit1' | 'unit2') => {
     setAcquiringGPSUnit(target);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setAcquiringGPSUnit(null);
-        if (target === 'unit1') {
-          setUnit1Lat(pos.coords.latitude.toFixed(6));
-          setUnit1Lng(pos.coords.longitude.toFixed(6));
-          showToast('📍 Unit 1 coordinates updated from current location!', 'success');
-        } else {
-          setUnit2Lat(pos.coords.latitude.toFixed(6));
-          setUnit2Lng(pos.coords.longitude.toFixed(6));
-          showToast('📍 Unit 2 coordinates updated from current location!', 'success');
-        }
-      },
-      (err) => {
-        setAcquiringGPSUnit(null);
-        showToast(`Could not acquire GPS: ${err.message}`, 'error');
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+    try {
+      const pos = await getCurrentGPSPosition(10000);
+      if (target === 'unit1') {
+        setUnit1Lat(pos.latitude.toFixed(6));
+        setUnit1Lng(pos.longitude.toFixed(6));
+        showToast('📍 Unit 1 coordinates updated from current location!', 'success');
+      } else {
+        setUnit2Lat(pos.latitude.toFixed(6));
+        setUnit2Lng(pos.longitude.toFixed(6));
+        showToast('📍 Unit 2 coordinates updated from current location!', 'success');
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Could not acquire GPS location', 'error');
+    } finally {
+      setAcquiringGPSUnit(null);
+    }
   };
 
   const handleSaveCompanySettings = async (e: React.FormEvent) => {

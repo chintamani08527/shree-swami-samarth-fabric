@@ -30,7 +30,7 @@ import { useToast } from '../../context/ToastContext.tsx';
 import { attendanceApi } from '../../services/api.ts';
 import { WorkerTodayStatus, ShiftEarnings } from '../../types/index.ts';
 import { FactoryLocationMap } from '../../components/common/FactoryLocationMap.tsx';
-import { getCurrentGPSPosition, GPSPosition } from '../../utils/geo.ts';
+import { getCurrentGPSPosition, GPSPosition, requestDeviceLocationPermission } from '../../utils/geo.ts';
 
 export const WorkerDashboard: React.FC = () => {
   const { user, logout } = useAuth();
@@ -160,6 +160,15 @@ export const WorkerDashboard: React.FC = () => {
   useEffect(() => {
     loadData();
     refreshGPSLocation(true);
+
+    // Register listener for native Android location permission grant
+    window.onAndroidLocationPermissionGranted = () => {
+      refreshGPSLocation(false);
+    };
+
+    return () => {
+      window.onAndroidLocationPermissionGranted = undefined;
+    };
   }, []);
 
   // Live timer for active working duration
@@ -668,7 +677,10 @@ export const WorkerDashboard: React.FC = () => {
               isWithinPremises={isWithinPremises}
               errorMessage={locationError}
               onRefreshLocation={() => refreshGPSLocation(false)}
-              onRequestPermission={() => refreshGPSLocation(false)}
+              onRequestPermission={() => {
+                requestDeviceLocationPermission();
+                refreshGPSLocation(false);
+              }}
             />
 
             {/* Today's Status Card */}

@@ -39,7 +39,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import android.Manifest
 import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
+import android.provider.Settings
 import android.webkit.GeolocationPermissions
+import org.json.JSONObject
 import java.io.File
 
 class MainActivity : ComponentActivity() {
@@ -52,6 +57,8 @@ class MainActivity : ComponentActivity() {
 
     private var pendingGeoOrigin: String? = null
     private var pendingGeoCallback: GeolocationPermissions.Callback? = null
+    private var latestLocation: Location? = null
+    private var locationListener: LocationListener? = null
 
     private val locationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -59,9 +66,28 @@ class MainActivity : ComponentActivity() {
         val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
         val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
         val isGranted = fineGranted || coarseGranted
-        pendingGeoCallback?.invoke(pendingGeoOrigin, isGranted, false)
+
+        // Always invoke callback with retain=true so WebView permanently remembers permission
+        try {
+            pendingGeoCallback?.invoke(pendingGeoOrigin, isGranted, true)
+        } catch (_: Exception) {}
         pendingGeoOrigin = null
         pendingGeoCallback = null
+
+        if (isGranted) {
+            startLocationUpdates()
+            // Notify JavaScript that Android OS location permission is granted
+            webView.post {
+                webView.evaluateJavascript(
+                    """
+                    if (typeof window.onAndroidLocationPermissionGranted === 'function') {
+                        window.onAndroidLocationPermissionGranted();
+                    }
+                    """.trimIndent(),
+                    null
+                )
+            }
+        }
     }
 
     private val fileChooserLauncher = registerForActivityResult(
@@ -155,7 +181,67 @@ class MainActivity : ComponentActivity() {
         setupBackNavigation()
         setupNetworkListener()
 
+        // Proactively request location permissions early on startup
+        checkAndRequestLocationPermission()
+
         loadApplication()
+    }
+
+    fun checkAndRequestLocationPermission() {
+        val fine = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val coarse = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (!fine && !coarse) {
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        } else {
+            startLocationUpdates()
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun startLocationUpdates() {
+        try {
+            val fine = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            val coarse = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            if (!fine && !coarse) return
+
+            val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
+
+            val gpsLoc = try { lm.getLastKnownLocation(LocationManager.GPS_PROVIDER) } catch (_: Exception) { null }
+            val netLoc = try { lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) } catch (_: Exception) { null }
+            val passiveLoc = try { lm.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER) } catch (_: Exception) { null }
+
+            val candidates = listOfNotNull(gpsLoc, netLoc, passiveLoc)
+            val best = candidates.maxByOrNull { it.time }
+            if (best != null) {
+                latestLocation = best
+            }
+
+            if (locationListener == null) {
+                locationListener = object : LocationListener {
+                    override fun onLocationChanged(location: Location) {
+                        latestLocation = location
+                    }
+                    override fun onProviderEnabled(provider: String) {}
+                    override fun onProviderDisabled(provider: String) {}
+                    @Deprecated("Deprecated in Java")
+                    override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+                }
+            }
+
+            if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2000L, 1.0f, locationListener!!)
+            }
+            if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 2000L, 1.0f, locationListener!!)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -199,11 +285,12 @@ class MainActivity : ComponentActivity() {
                 origin: String?,
                 callback: GeolocationPermissions.Callback?
             ) {
+                // Always grant permission in WebView with retain=true so WebView permanently allows the origin
+                callback?.invoke(origin, true, true)
+
                 val finePermission = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
                 val coarsePermission = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
-                if (finePermission == PackageManager.PERMISSION_GRANTED || coarsePermission == PackageManager.PERMISSION_GRANTED) {
-                    callback?.invoke(origin, true, false)
-                } else {
+                if (finePermission != PackageManager.PERMISSION_GRANTED && coarsePermission != PackageManager.PERMISSION_GRANTED) {
                     pendingGeoOrigin = origin
                     pendingGeoCallback = callback
                     locationPermissionLauncher.launch(
@@ -212,6 +299,8 @@ class MainActivity : ComponentActivity() {
                             Manifest.permission.ACCESS_COARSE_LOCATION
                         )
                     )
+                } else {
+                    startLocationUpdates()
                 }
             }
 
@@ -395,6 +484,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         webView.onResume()
         CookieManager.getInstance().flush()
+        startLocationUpdates()
     }
 
     override fun onPause() {
@@ -404,6 +494,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        locationListener?.let {
+            val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+            try { lm?.removeUpdates(it) } catch (_: Exception) {}
+        }
         webView.destroy()
         super.onDestroy()
     }
@@ -418,6 +512,77 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun isNativeApp(): Boolean {
             return true
+        }
+
+        @JavascriptInterface
+        fun hasLocationPermission(): Boolean {
+            val fine = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            val coarse = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            return fine || coarse
+        }
+
+        @JavascriptInterface
+        fun requestLocationPermission() {
+            runOnUiThread {
+                checkAndRequestLocationPermission()
+            }
+        }
+
+        @JavascriptInterface
+        fun isLocationServiceEnabled(): Boolean {
+            val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return false
+            return lm.isProviderEnabled(LocationManager.GPS_PROVIDER) || lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        }
+
+        @JavascriptInterface
+        fun openLocationSettings() {
+            try {
+                val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+            } catch (_: Exception) {
+                try {
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.fromParts("package", packageName, null)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                } catch (_: Exception) {}
+            }
+        }
+
+        @SuppressLint("MissingPermission")
+        @JavascriptInterface
+        fun getNativeGPSLocation(): String {
+            try {
+                val fine = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                val coarse = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                if (!fine && !coarse) {
+                    return ""
+                }
+
+                val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return ""
+
+                val gpsLoc = try { lm.getLastKnownLocation(LocationManager.GPS_PROVIDER) } catch (_: Exception) { null }
+                val netLoc = try { lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) } catch (_: Exception) { null }
+                val passiveLoc = try { lm.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER) } catch (_: Exception) { null }
+
+                val candidates = listOfNotNull(latestLocation, gpsLoc, netLoc, passiveLoc)
+                val best = candidates.maxByOrNull { it.time }
+
+                if (best != null) {
+                    val json = JSONObject()
+                    json.put("latitude", best.latitude)
+                    json.put("longitude", best.longitude)
+                    json.put("accuracy", if (best.hasAccuracy()) best.accuracy.toDouble() else 15.0)
+                    json.put("timestamp", best.time)
+                    return json.toString()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            return ""
         }
 
         @JavascriptInterface
