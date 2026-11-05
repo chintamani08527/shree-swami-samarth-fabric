@@ -9,6 +9,13 @@
       "maxDuration": 15
     }
   },
+  "redirects": [
+    {
+      "source": "/(Shree-Swami-Samarth-Fabric\\.apk|app-debug\\.apk|download|download-app)",
+      "destination": "https://github.com/chintamani08527/shree-swami-samarth-fabric/releases/download/v1.1.0/Shree-Swami-Samarth-Fabric.apk",
+      "permanent": false
+    }
+  ],
   "headers": [
     {
       "source": "/(.*\\.apk)",
