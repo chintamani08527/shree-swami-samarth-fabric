@@ -48,7 +48,7 @@ router.post('/check-in', async (req: Request, res: Response) => {
     let targetUserId = req.user!.id;
     let adminActor: { id: string; name: string } | undefined = undefined;
 
-    if (req.body.workerUserId && req.user!.role === Roles.ADMIN) {
+    if (req.body.workerUserId && (req.user!.role === Roles.ADMIN || req.user!.role === Roles.SUPER_ADMIN)) {
       targetUserId = req.body.workerUserId;
       adminActor = { id: req.user!.id, name: req.user!.name };
     }
@@ -84,7 +84,7 @@ router.post('/check-out', async (req: Request, res: Response) => {
     let targetUserId = req.user!.id;
     let adminActor: { id: string; name: string } | undefined = undefined;
 
-    if (req.body.workerUserId && req.user!.role === Roles.ADMIN) {
+    if (req.body.workerUserId && (req.user!.role === Roles.ADMIN || req.user!.role === Roles.SUPER_ADMIN)) {
       targetUserId = req.body.workerUserId;
       adminActor = { id: req.user!.id, name: req.user!.name };
     }
@@ -261,11 +261,12 @@ router.get('/live', requireSupervisorOrAdmin, async (req: Request, res: Response
 // 6b. Admin / Supervisor: Overtime approval list
 router.get('/overtime/list', requireSupervisorOrAdmin, async (req: Request, res: Response) => {
   try {
-    const { status, startDate, endDate } = req.query;
+    const { status, startDate, endDate, limit } = req.query;
     const result = await getOvertimeRequests({
       status: status as string,
       startDate: startDate as string,
       endDate: endDate as string,
+      limit: limit ? parseInt(limit as string, 10) : undefined,
     });
     res.json({
       success: true,

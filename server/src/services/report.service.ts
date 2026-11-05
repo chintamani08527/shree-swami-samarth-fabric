@@ -284,7 +284,7 @@ export async function getWeeklyAttendanceReport(refDateStr?: string, departmentI
         daysPresent += 1;
         totalMinutes += rec.workingMinutes;
         if (rec.overtimeStatus === 'APPROVED') {
-          totalOvertimeMinutes += (rec.overtimeMinutes || 0);
+          totalOvertimeMinutes += (rec.overtimeMinutes || (rec.overtimeHours ? Math.round(rec.overtimeHours * 60) : 0));
         }
         totalBreakMinutes += rec.breakMinutes;
         if (rec.lateMinutes > 0) daysLate += 1;
@@ -442,7 +442,7 @@ export async function getMonthlyAttendanceReport(refDateStr?: string, department
         daysPresent += 1;
         totalMinutes += r.workingMinutes;
         if (r.overtimeStatus === 'APPROVED') {
-          totalOvertimeMinutes += (r.overtimeMinutes || 0);
+          totalOvertimeMinutes += (r.overtimeMinutes || (r.overtimeHours ? Math.round(r.overtimeHours * 60) : 0));
         }
         totalBreakMinutes += r.breakMinutes;
         if (r.lateMinutes > 0) daysLate += 1;

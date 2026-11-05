@@ -41,9 +41,12 @@ export async function listWorkers(params: {
 
   if (params.search) {
     const s = params.search.trim();
+    const isPostgres = (process.env.DATABASE_URL || '').startsWith('postgres');
+    const modeObj = isPostgres ? { mode: 'insensitive' as const } : {};
     where.OR = [
-      { name: { contains: s } },
+      { name: { contains: s, ...modeObj } },
       { workerId: { contains: s.toUpperCase() } },
+      { workerId: { contains: s } },
       { phone: { contains: s } },
     ];
   }

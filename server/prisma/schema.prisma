@@ -38,6 +38,8 @@ model User {
   @@index([role])
   @@index([departmentId])
   @@index([isActive])
+  @@index([role, isActive])
+  @@index([unit])
 }
 
 model Department {
@@ -94,6 +96,10 @@ model AttendanceRecord {
   @@index([status])
   @@index([overtimeStatus])
   @@index([isMissingCheckOut])
+  @@index([attendanceDate, status])
+  @@index([attendanceDate, shiftType])
+  @@index([overtimeStatus, attendanceDate])
+  @@index([checkInLocationUnit, attendanceDate])
 }
 
 model Shift {
@@ -143,6 +149,8 @@ model AuditLog {
   @@index([action])
   @@index([entityType])
   @@index([createdAt])
+  @@index([entityType, createdAt])
+  @@index([action, createdAt])
 }
 
 model CompanySettings {

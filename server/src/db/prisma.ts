@@ -4,9 +4,17 @@ import fs from 'fs';
 import bcrypt from 'bcryptjs';
 
 function resolveDatabaseUrl(): string {
+  let url = process.env.DATABASE_URL;
+
   // If explicitly provided custom Postgres or external URL
-  if (process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('dev.db')) {
-    return process.env.DATABASE_URL;
+  if (url && !url.includes('dev.db')) {
+    if (url.startsWith('postgres://') || url.startsWith('postgresql://')) {
+      if (!url.includes('connection_limit=')) {
+        const sep = url.includes('?') ? '&' : '?';
+        url = `${url}${sep}connection_limit=15&pool_timeout=20`;
+      }
+    }
+    return url;
   }
 
   // On Vercel serverless environment (/tmp is the only writable directory)
@@ -64,10 +72,6 @@ export async function ensureDatabaseReady() {
     const settings = await prisma.companySettings.findUnique({
       where: { id: 'default-settings' },
     });
-    if (settings) {
-      isDbInitialized = true;
-      return;
-    }
     if (!settings) {
       await prisma.companySettings.create({
         data: {

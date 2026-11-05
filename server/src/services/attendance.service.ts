@@ -276,39 +276,50 @@ export async function processCheckIn(
   // Calculate working hours & status (no band restriction)
   const calc = calculateWorkingHoursAndStatus(serverNow, null, shift, attendanceDate);
 
-  const record = existingRecord
-    ? await prisma.attendanceRecord.update({
-        where: { id: existingRecord.id },
-        data: {
-          checkInAt: serverNow,
-          shiftType: normalizedShiftType,
-          status: calc.status,
-          lateMinutes: calc.lateMinutes,
-          source,
-          isMissingCheckOut: false,
-          checkInLatitude: location?.latitude ?? null,
-          checkInLongitude: location?.longitude ?? null,
-          checkInLocationUnit: geoResult?.detectedUnit ?? (adminActor ? 'Admin Override' : 'Factory Premises'),
-          locationVerified: geoResult?.isWithinPremises ?? Boolean(adminActor),
-        },
-      })
-    : await prisma.attendanceRecord.create({
-        data: {
+  const checkInData = {
+    checkInAt: serverNow,
+    shiftType: normalizedShiftType,
+    status: calc.status,
+    lateMinutes: calc.lateMinutes,
+    source,
+    isMissingCheckOut: false,
+    checkInLatitude: location?.latitude ?? null,
+    checkInLongitude: location?.longitude ?? null,
+    checkInLocationUnit: geoResult?.detectedUnit ?? (adminActor ? 'Admin Override' : 'Factory Premises'),
+    locationVerified: geoResult?.isWithinPremises ?? Boolean(adminActor),
+  };
+
+  let record: any;
+  try {
+    record = await prisma.attendanceRecord.upsert({
+      where: {
+        userId_attendanceDate: {
           userId,
-          workerId: user.workerId,
           attendanceDate,
-          checkInAt: serverNow,
-          shiftType: normalizedShiftType,
-          status: calc.status,
-          lateMinutes: calc.lateMinutes,
-          source,
-          isMissingCheckOut: false,
-          checkInLatitude: location?.latitude ?? null,
-          checkInLongitude: location?.longitude ?? null,
-          checkInLocationUnit: geoResult?.detectedUnit ?? (adminActor ? 'Admin Override' : 'Factory Premises'),
-          locationVerified: geoResult?.isWithinPremises ?? Boolean(adminActor),
         },
+      },
+      update: checkInData,
+      create: {
+        userId,
+        workerId: user.workerId,
+        attendanceDate,
+        ...checkInData,
+      },
+    });
+  } catch (err: any) {
+    if (err?.code === 'P2002' || err?.message?.includes('Unique constraint')) {
+      const existing = await prisma.attendanceRecord.findUnique({
+        where: { userId_attendanceDate: { userId, attendanceDate } },
       });
+      if (existing) {
+        record = existing;
+      } else {
+        throw err;
+      }
+    } else {
+      throw err;
+    }
+  }
 
   if (adminActor) {
     await logAudit({
@@ -686,36 +697,51 @@ export async function logCustomWageWork(
     }
   }
 
-  if (!record) {
-    record = await prisma.attendanceRecord.create({
-      data: {
-        userId,
-        workerId: user.workerId,
-        attendanceDate,
-        status: AttendanceStatuses.PRESENT,
-        source: AttendanceSources.WEB_MOBILE,
-        machinesOperated: data.machinesOperated !== undefined && data.machinesOperated !== null ? Number(data.machinesOperated) : null,
-        hoursOperated: data.hoursOperated !== undefined && data.hoursOperated !== null ? Number(data.hoursOperated) : null,
-        overtimeMachines: data.overtimeMachines !== undefined && data.overtimeMachines !== null ? Number(data.overtimeMachines) : null,
-        overtimeHours: data.overtimeHours !== undefined && data.overtimeHours !== null ? Number(data.overtimeHours) : null,
-        overtimeStatus: (Number(data.overtimeMachines || 0) > 0 || Number(data.overtimeHours || 0) > 0) ? 'PENDING' : 'NONE',
-        remarks: data.remarks || null,
-      },
-    });
-  } else {
+  const wageFields = {
+    ...(data.machinesOperated !== undefined ? { machinesOperated: data.machinesOperated !== null ? Number(data.machinesOperated) : null } : {}),
+    ...(data.hoursOperated !== undefined ? { hoursOperated: data.hoursOperated !== null ? Number(data.hoursOperated) : null } : {}),
+    ...(data.overtimeMachines !== undefined ? { overtimeMachines: data.overtimeMachines !== null ? Number(data.overtimeMachines) : null } : {}),
+    ...(data.overtimeHours !== undefined ? { overtimeHours: data.overtimeHours !== null ? Number(data.overtimeHours) : null } : {}),
+    ...(Number(data.overtimeMachines || 0) > 0 || Number(data.overtimeHours || 0) > 0
+      ? { overtimeStatus: 'PENDING', overtimeApprovedAt: null, overtimeApprovedBy: null }
+      : {}),
+    ...(data.remarks !== undefined ? { remarks: data.remarks } : {}),
+  };
+
+  if (record) {
     record = await prisma.attendanceRecord.update({
       where: { id: record.id },
-      data: {
-        ...(data.machinesOperated !== undefined ? { machinesOperated: data.machinesOperated !== null ? Number(data.machinesOperated) : null } : {}),
-        ...(data.hoursOperated !== undefined ? { hoursOperated: data.hoursOperated !== null ? Number(data.hoursOperated) : null } : {}),
-        ...(data.overtimeMachines !== undefined ? { overtimeMachines: data.overtimeMachines !== null ? Number(data.overtimeMachines) : null } : {}),
-        ...(data.overtimeHours !== undefined ? { overtimeHours: data.overtimeHours !== null ? Number(data.overtimeHours) : null } : {}),
-        ...(Number(data.overtimeMachines || 0) > 0 || Number(data.overtimeHours || 0) > 0
-          ? { overtimeStatus: 'PENDING', overtimeApprovedAt: null, overtimeApprovedBy: null }
-          : {}),
-        ...(data.remarks !== undefined ? { remarks: data.remarks } : {}),
-      },
+      data: wageFields,
     });
+  } else {
+    try {
+      record = await prisma.attendanceRecord.upsert({
+        where: {
+          userId_attendanceDate: {
+            userId,
+            attendanceDate,
+          },
+        },
+        update: wageFields,
+        create: {
+          userId,
+          workerId: user.workerId,
+          attendanceDate,
+          status: AttendanceStatuses.PRESENT,
+          source: AttendanceSources.WEB_MOBILE,
+          ...wageFields,
+        },
+      });
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        record = await prisma.attendanceRecord.update({
+          where: { userId_attendanceDate: { userId, attendanceDate } },
+          data: wageFields,
+        });
+      } else {
+        throw err;
+      }
+    }
   }
 
   return record;
@@ -1356,6 +1382,7 @@ export async function getOvertimeRequests(filter?: {
   status?: string;
   startDate?: string;
   endDate?: string;
+  limit?: number;
 }) {
   const where: any = {
     OR: [
@@ -1375,6 +1402,8 @@ export async function getOvertimeRequests(filter?: {
     if (filter.startDate) where.attendanceDate.gte = filter.startDate;
     if (filter.endDate) where.attendanceDate.lte = filter.endDate;
   }
+
+  const limit = Math.min(1000, Math.max(1, filter?.limit || 250));
 
   const records = await prisma.attendanceRecord.findMany({
     where,
@@ -1396,6 +1425,7 @@ export async function getOvertimeRequests(filter?: {
       },
     },
     orderBy: [{ attendanceDate: 'desc' }, { createdAt: 'desc' }],
+    take: limit,
   });
 
   let totalPendingCount = 0;
