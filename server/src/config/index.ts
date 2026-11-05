@@ -50,4 +50,13 @@ export const DEFAULT_ATTENDANCE_RULES = {
   fullDayThresholdHours: 8.0,
   overtimeThresholdHours: 8.5,
   dailyCutoffTime: '23:59', // cutoff for marking missing checkout
+  // Factory Geofencing configuration (Unit 1 & Unit 2)
+  geofencingEnabled: true,
+  geofenceRadiusMeters: 100, // 100 meter boundary around factory units
+  unit1Name: 'Unit 1',
+  unit1Lat: 16.432500, // 16°25'57.0"N
+  unit1Lng: 74.384222, // 74°23'03.2"E
+  unit2Name: 'Unit 2',
+  unit2Lat: 16.344861, // 16°20'41.5"N
+  unit2Lng: 74.441361, // 74°26'28.9"E
 };

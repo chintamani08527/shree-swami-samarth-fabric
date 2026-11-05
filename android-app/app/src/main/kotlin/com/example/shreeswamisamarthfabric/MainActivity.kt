@@ -37,6 +37,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import android.Manifest
+import android.content.pm.PackageManager
+import android.webkit.GeolocationPermissions
 import java.io.File
 
 class MainActivity : ComponentActivity() {
@@ -46,6 +49,20 @@ class MainActivity : ComponentActivity() {
     private lateinit var progressBar: ProgressBar
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
     private var backPressedTime: Long = 0
+
+    private var pendingGeoOrigin: String? = null
+    private var pendingGeoCallback: GeolocationPermissions.Callback? = null
+
+    private val locationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+        val isGranted = fineGranted || coarseGranted
+        pendingGeoCallback?.invoke(pendingGeoOrigin, isGranted, false)
+        pendingGeoOrigin = null
+        pendingGeoCallback = null
+    }
 
     private val fileChooserLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -147,6 +164,7 @@ class MainActivity : ComponentActivity() {
             javaScriptEnabled = true
             domStorageEnabled = true
             databaseEnabled = true
+            setGeolocationEnabled(true)
             useWideViewPort = true
             loadWithOverviewMode = true
             allowFileAccess = true
@@ -174,6 +192,26 @@ class MainActivity : ComponentActivity() {
                 } else {
                     progressBar.visibility = View.GONE
                     swipeRefreshLayout.isRefreshing = false
+                }
+            }
+
+            override fun onGeolocationPermissionsShowPrompt(
+                origin: String?,
+                callback: GeolocationPermissions.Callback?
+            ) {
+                val finePermission = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                val coarsePermission = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
+                if (finePermission == PackageManager.PERMISSION_GRANTED || coarsePermission == PackageManager.PERMISSION_GRANTED) {
+                    callback?.invoke(origin, true, false)
+                } else {
+                    pendingGeoOrigin = origin
+                    pendingGeoCallback = callback
+                    locationPermissionLauncher.launch(
+                        arrayOf(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                        )
+                    )
                 }
             }
 

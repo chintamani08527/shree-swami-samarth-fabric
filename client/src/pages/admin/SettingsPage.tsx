@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, Building2, Plus, Edit2, Trash2, RotateCcw, ShieldAlert, Check, RefreshCw } from 'lucide-react';
+import { Clock, Building2, Plus, Edit2, Trash2, RotateCcw, ShieldAlert, Check, RefreshCw, MapPin, Factory, Navigation, Compass } from 'lucide-react';
 import { settingsApi } from '../../services/api.ts';
 import { CompanySettingsData, Shift } from '../../types/index.ts';
 import { Modal } from '../../components/common/Modal.tsx';
@@ -20,6 +20,17 @@ export const SettingsPage: React.FC = () => {
   const [breakDuration, setBreakDuration] = useState(60);
   const [autoDeductThreshold, setAutoDeductThreshold] = useState(300);
   const [overtimeThreshold, setOvertimeThreshold] = useState(8.5);
+
+  // Factory Geofencing & Map Coordinates (Unit 1 & Unit 2)
+  const [geofencingEnabled, setGeofencingEnabled] = useState(true);
+  const [geofenceRadius, setGeofenceRadius] = useState(100);
+  const [unit1Name, setUnit1Name] = useState('Unit 1');
+  const [unit1Lat, setUnit1Lat] = useState('16.432500');
+  const [unit1Lng, setUnit1Lng] = useState('74.384222');
+  const [unit2Name, setUnit2Name] = useState('Unit 2');
+  const [unit2Lat, setUnit2Lat] = useState('16.344861');
+  const [unit2Lng, setUnit2Lng] = useState('74.441361');
+  const [acquiringGPSUnit, setAcquiringGPSUnit] = useState<'unit1' | 'unit2' | null>(null);
 
   // Add / Edit Shift Modal
   const [shiftModalOpen, setShiftModalOpen] = useState(false);
@@ -47,6 +58,14 @@ export const SettingsPage: React.FC = () => {
         setBreakDuration(s.rules.breakDurationMinutes || 60);
         setAutoDeductThreshold(s.rules.autoDeductBreakThresholdMinutes || 300);
         setOvertimeThreshold(s.rules.overtimeThresholdHours || 8.5);
+        setGeofencingEnabled(s.rules.geofencingEnabled ?? true);
+        setGeofenceRadius(s.rules.geofenceRadiusMeters ?? 100);
+        setUnit1Name(s.rules.unit1Name || 'Unit 1');
+        setUnit1Lat(String(s.rules.unit1Lat ?? 16.432500));
+        setUnit1Lng(String(s.rules.unit1Lng ?? 74.384222));
+        setUnit2Name(s.rules.unit2Name || 'Unit 2');
+        setUnit2Lat(String(s.rules.unit2Lat ?? 16.344861));
+        setUnit2Lng(String(s.rules.unit2Lng ?? 74.441361));
       }
     } catch (err: any) {
       showToast(err.message || 'Failed to load system settings', 'error');
@@ -58,6 +77,33 @@ export const SettingsPage: React.FC = () => {
   useEffect(() => {
     loadSettings();
   }, []);
+
+  const handleGetDeviceLocation = (target: 'unit1' | 'unit2') => {
+    if (!navigator.geolocation) {
+      showToast('Geolocation is not supported by your browser', 'error');
+      return;
+    }
+    setAcquiringGPSUnit(target);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setAcquiringGPSUnit(null);
+        if (target === 'unit1') {
+          setUnit1Lat(pos.coords.latitude.toFixed(6));
+          setUnit1Lng(pos.coords.longitude.toFixed(6));
+          showToast('📍 Unit 1 coordinates updated from current location!', 'success');
+        } else {
+          setUnit2Lat(pos.coords.latitude.toFixed(6));
+          setUnit2Lng(pos.coords.longitude.toFixed(6));
+          showToast('📍 Unit 2 coordinates updated from current location!', 'success');
+        }
+      },
+      (err) => {
+        setAcquiringGPSUnit(null);
+        showToast(`Could not acquire GPS: ${err.message}`, 'error');
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   const handleSaveCompanySettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,6 +118,14 @@ export const SettingsPage: React.FC = () => {
           breakDurationMinutes: Number(breakDuration),
           autoDeductBreakThresholdMinutes: Number(autoDeductThreshold),
           overtimeThresholdHours: Number(overtimeThreshold),
+          geofencingEnabled: Boolean(geofencingEnabled),
+          geofenceRadiusMeters: Number(geofenceRadius),
+          unit1Name: unit1Name.trim(),
+          unit1Lat: parseFloat(unit1Lat) || 16.432500,
+          unit1Lng: parseFloat(unit1Lng) || 74.384222,
+          unit2Name: unit2Name.trim(),
+          unit2Lat: parseFloat(unit2Lat) || 16.344861,
+          unit2Lng: parseFloat(unit2Lng) || 74.441361,
         },
       });
 
@@ -227,6 +281,155 @@ export const SettingsPage: React.FC = () => {
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-mono focus:ring-2 focus:ring-teal-500"
                 />
                 <span className="text-[10px] text-slate-400 mt-1 block">Default: Asia/Kolkata (IST +05:30)</span>
+              </div>
+            </div>
+
+            {/* Factory Geofencing & GPS Map Coordinates Section */}
+            <div className="pt-5 border-t border-slate-100 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-bold text-navy-950 flex items-center gap-2">
+                  <MapPin className="w-5 h-5 text-indigo-600" />
+                  <span>Factory Geofence & GPS Coordinates (युनिट १ व युनिट २ नकाशे)</span>
+                </h3>
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <span className="text-xs font-bold text-slate-700">जिओफेन्सिंग:</span>
+                  <input
+                    type="checkbox"
+                    checked={geofencingEnabled}
+                    onChange={(e) => setGeofencingEnabled(e.target.checked)}
+                    className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500 border-slate-300"
+                  />
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                    geofencingEnabled ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {geofencingEnabled ? 'सक्रिय (Active)' : 'बंद (Disabled)'}
+                  </span>
+                </label>
+              </div>
+
+              <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200/80 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Geofence Radius (मर्यादा मीटर मध्ये - उदा. 100 मीटर)
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      required
+                      min={10}
+                      max={5000}
+                      value={geofenceRadius}
+                      onChange={(e) => setGeofenceRadius(Number(e.target.value))}
+                      className="w-36 px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-bold font-mono focus:ring-2 focus:ring-teal-500"
+                    />
+                    <span className="text-xs font-medium text-slate-500">
+                      मीटर आवारात (फॅक्टरी केंद्रापासून कामगारांना या अंतरातच Check In/Out करता येईल)
+                    </span>
+                  </div>
+                </div>
+
+                {/* Unit 1 Coordinates */}
+                <div className="p-4 bg-white rounded-xl border border-indigo-100 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Factory className="w-4 h-4 text-indigo-600" />
+                      <span className="text-xs font-bold text-indigo-950">Unit 1 Coordinates (16°25'57.0"N 74°23'03.2"E)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleGetDeviceLocation('unit1')}
+                      disabled={acquiringGPSUnit === 'unit1'}
+                      className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all"
+                    >
+                      <Navigation className={`w-3.5 h-3.5 ${acquiringGPSUnit === 'unit1' ? 'animate-spin' : ''}`} />
+                      <span>{acquiringGPSUnit === 'unit1' ? 'Locating...' : 'Use Current Device GPS'}</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Unit 1 Name</label>
+                      <input
+                        type="text"
+                        value={unit1Name}
+                        onChange={(e) => setUnit1Name(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Latitude (अक्षांश)</label>
+                      <input
+                        type="text"
+                        value={unit1Lat}
+                        onChange={(e) => setUnit1Lat(e.target.value)}
+                        placeholder="16.432500"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-semibold focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Longitude (रेखांश)</label>
+                      <input
+                        type="text"
+                        value={unit1Lng}
+                        onChange={(e) => setUnit1Lng(e.target.value)}
+                        placeholder="74.384222"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-semibold focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Unit 2 Coordinates */}
+                <div className="p-4 bg-white rounded-xl border border-sky-100 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Factory className="w-4 h-4 text-sky-600" />
+                      <span className="text-xs font-bold text-sky-950">Unit 2 Coordinates (16°20'41.5"N 74°26'28.9"E)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleGetDeviceLocation('unit2')}
+                      disabled={acquiringGPSUnit === 'unit2'}
+                      className="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all"
+                    >
+                      <Navigation className={`w-3.5 h-3.5 ${acquiringGPSUnit === 'unit2' ? 'animate-spin' : ''}`} />
+                      <span>{acquiringGPSUnit === 'unit2' ? 'Locating...' : 'Use Current Device GPS'}</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Unit 2 Name</label>
+                      <input
+                        type="text"
+                        value={unit2Name}
+                        onChange={(e) => setUnit2Name(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-sky-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Latitude (अक्षांश)</label>
+                      <input
+                        type="text"
+                        value={unit2Lat}
+                        onChange={(e) => setUnit2Lat(e.target.value)}
+                        placeholder="16.344861"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-semibold focus:ring-2 focus:ring-sky-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Longitude (रेखांश)</label>
+                      <input
+                        type="text"
+                        value={unit2Lng}
+                        onChange={(e) => setUnit2Lng(e.target.value)}
+                        placeholder="74.441361"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-semibold focus:ring-2 focus:ring-sky-500"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 

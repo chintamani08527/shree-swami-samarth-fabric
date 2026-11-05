@@ -32,16 +32,146 @@ async function getDefaultActiveShift() {
 }
 
 /**
+ * Haversine formula to compute great-circle distance between two GPS coordinates in meters
+ */
+export function calculateHaversineDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const R = 6371e3; // Earth's mean radius in meters
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c);
+}
+
+/**
+ * Verify worker's coordinates against factory Unit 1 and Unit 2 geofences
+ */
+export async function verifyFactoryGeofence(
+  latitude?: number | null,
+  longitude?: number | null
+) {
+  const settings = await prisma.companySettings.findUnique({
+    where: { id: 'default-settings' },
+  });
+
+  let rules: any = DEFAULT_ATTENDANCE_RULES;
+  if (settings?.attendanceRules) {
+    try {
+      rules = { ...DEFAULT_ATTENDANCE_RULES, ...JSON.parse(settings.attendanceRules) };
+    } catch {}
+  }
+
+  const geofencingEnabled = rules.geofencingEnabled ?? true;
+  const geofenceRadius = Number(rules.geofenceRadiusMeters ?? DEFAULT_ATTENDANCE_RULES.geofenceRadiusMeters);
+
+  const u1Lat = Number(rules.unit1Lat ?? DEFAULT_ATTENDANCE_RULES.unit1Lat);
+  const u1Lng = Number(rules.unit1Lng ?? DEFAULT_ATTENDANCE_RULES.unit1Lng);
+  const u1Name = rules.unit1Name || DEFAULT_ATTENDANCE_RULES.unit1Name;
+
+  const u2Lat = Number(rules.unit2Lat ?? DEFAULT_ATTENDANCE_RULES.unit2Lat);
+  const u2Lng = Number(rules.unit2Lng ?? DEFAULT_ATTENDANCE_RULES.unit2Lng);
+  const u2Name = rules.unit2Name || DEFAULT_ATTENDANCE_RULES.unit2Name;
+
+  if (!geofencingEnabled) {
+    return {
+      isWithinPremises: true,
+      geofencingEnabled: false,
+      detectedUnit: 'Factory Premises',
+      distanceToUnit1: null,
+      distanceToUnit2: null,
+      nearestUnitName: null,
+      nearestDistance: null,
+      geofenceRadiusMeters: geofenceRadius,
+      message: 'Geofencing is currently disabled.',
+      unit1: { name: u1Name, latitude: u1Lat, longitude: u1Lng },
+      unit2: { name: u2Name, latitude: u2Lat, longitude: u2Lng },
+    };
+  }
+
+  if (latitude == null || longitude == null || isNaN(latitude) || isNaN(longitude)) {
+    return {
+      isWithinPremises: false,
+      geofencingEnabled: true,
+      detectedUnit: null,
+      distanceToUnit1: null,
+      distanceToUnit2: null,
+      nearestUnitName: null,
+      nearestDistance: null,
+      geofenceRadiusMeters: geofenceRadius,
+      message: '📍 कृपया लोकेशन (GPS) चालू करा. लोकेशन शिवाय हजेरी नोंदवता येणार नाही. (Please turn ON GPS to check in/out).',
+      unit1: { name: u1Name, latitude: u1Lat, longitude: u1Lng },
+      unit2: { name: u2Name, latitude: u2Lat, longitude: u2Lng },
+    };
+  }
+
+  const dist1 = calculateHaversineDistance(latitude, longitude, u1Lat, u1Lng);
+  const dist2 = calculateHaversineDistance(latitude, longitude, u2Lat, u2Lng);
+
+  const within1 = dist1 <= geofenceRadius;
+  const within2 = dist2 <= geofenceRadius;
+
+  let detectedUnit: string | null = null;
+  if (within1 && within2) {
+    detectedUnit = dist1 <= dist2 ? u1Name : u2Name;
+  } else if (within1) {
+    detectedUnit = u1Name;
+  } else if (within2) {
+    detectedUnit = u2Name;
+  }
+
+  const nearestUnitName = dist1 <= dist2 ? u1Name : u2Name;
+  const nearestDistance = Math.min(dist1, dist2);
+  const isWithinPremises = Boolean(within1 || within2);
+
+  return {
+    isWithinPremises,
+    geofencingEnabled,
+    detectedUnit: detectedUnit || (isWithinPremises ? nearestUnitName : 'Outside Factory'),
+    distanceToUnit1: dist1,
+    distanceToUnit2: dist2,
+    nearestUnitName,
+    nearestDistance,
+    geofenceRadiusMeters: geofenceRadius,
+    message: isWithinPremises
+      ? `✅ फॅक्टरी आवारात आहात: ${detectedUnit} (${nearestDistance}m अंतर)`
+      : `❌ तुम्ही फॅक्टरी आवाराच्या बाहेर आहात. अंतर: ${nearestDistance}m (${nearestUnitName} पासून). कमाल मर्यादा: ${geofenceRadius}m. कृपया फॅक्टरी आवारात येऊन हजेरी नोंदवा.`,
+    unit1: { name: u1Name, latitude: u1Lat, longitude: u1Lng },
+    unit2: { name: u2Name, latitude: u2Lat, longitude: u2Lng },
+  };
+}
+
+/**
  * Worker check-in action
  */
 export async function processCheckIn(
   userId: string,
   source: AttendanceSourceType = AttendanceSources.WEB_MOBILE,
   adminActor?: { id: string; name: string },
-  shiftChoice?: 'DAY' | 'NIGHT' | string
+  shiftChoice?: 'DAY' | 'NIGHT' | string,
+  location?: { latitude?: number | null; longitude?: number | null }
 ) {
   const serverNow = new Date(); // Server-authoritative timestamp
   const attendanceDate = getKolkataDateString(serverNow);
+
+  // If not admin override, verify geofence
+  let geoResult: any = null;
+  if (!adminActor) {
+    geoResult = await verifyFactoryGeofence(location?.latitude, location?.longitude);
+    if (geoResult.geofencingEnabled && !geoResult.isWithinPremises) {
+      throw new Error(geoResult.message);
+    }
+  }
 
   // Fetch worker and active record in parallel
   const [user, existingRecord] = await Promise.all([
@@ -156,6 +286,10 @@ export async function processCheckIn(
           lateMinutes: calc.lateMinutes,
           source,
           isMissingCheckOut: false,
+          checkInLatitude: location?.latitude ?? null,
+          checkInLongitude: location?.longitude ?? null,
+          checkInLocationUnit: geoResult?.detectedUnit ?? (adminActor ? 'Admin Override' : 'Factory Premises'),
+          locationVerified: geoResult?.isWithinPremises ?? Boolean(adminActor),
         },
       })
     : await prisma.attendanceRecord.create({
@@ -169,6 +303,10 @@ export async function processCheckIn(
           lateMinutes: calc.lateMinutes,
           source,
           isMissingCheckOut: false,
+          checkInLatitude: location?.latitude ?? null,
+          checkInLongitude: location?.longitude ?? null,
+          checkInLocationUnit: geoResult?.detectedUnit ?? (adminActor ? 'Admin Override' : 'Factory Premises'),
+          locationVerified: geoResult?.isWithinPremises ?? Boolean(adminActor),
         },
       });
 
@@ -299,10 +437,20 @@ export async function processCheckOut(
     hoursOperated?: number | null;
     overtimeMachines?: number | null;
     overtimeHours?: number | null;
-  }
+  },
+  location?: { latitude?: number | null; longitude?: number | null }
 ) {
   const serverNow = new Date(); // Server-authoritative timestamp
   const attendanceDate = getKolkataDateString(serverNow);
+
+  // If not admin override, verify geofence
+  let geoResult: any = null;
+  if (!adminActor) {
+    geoResult = await verifyFactoryGeofence(location?.latitude, location?.longitude);
+    if (geoResult.geofencingEnabled && !geoResult.isWithinPremises) {
+      throw new Error(geoResult.message);
+    }
+  }
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -434,6 +582,10 @@ export async function processCheckOut(
       ...(Number(customDetails?.overtimeHours || 0) > 0 || Number(customDetails?.overtimeMachines || 0) > 0
         ? { overtimeStatus: 'PENDING', overtimeApprovedAt: null, overtimeApprovedBy: null }
         : {}),
+      checkOutLatitude: location?.latitude ?? null,
+      checkOutLongitude: location?.longitude ?? null,
+      checkOutLocationUnit: geoResult?.detectedUnit ?? (adminActor ? 'Admin Override' : 'Factory Premises'),
+      locationVerified: geoResult?.isWithinPremises ?? Boolean(adminActor),
     },
   });
 
@@ -580,7 +732,7 @@ export async function getWorkerStatus(userId: string) {
   const weekInfo = getWeekDateRange(todayDate);
 
   // Parallelize user, today record, yesterday record, and weekly records lookups
-  const [user, todayRecord, yesterdayRecord, weeklyRecords] = await Promise.all([
+  const [user, todayRecord, yesterdayRecord, weeklyRecords, companySettings] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -616,9 +768,19 @@ export async function getWorkerStatus(userId: string) {
         },
       },
     }),
+    prisma.companySettings.findUnique({
+      where: { id: 'default-settings' },
+    }),
   ]);
 
   if (!user) throw new Error('Worker not found');
+
+  let activeRules: any = DEFAULT_ATTENDANCE_RULES;
+  if (companySettings?.attendanceRules) {
+    try {
+      activeRules = { ...DEFAULT_ATTENDANCE_RULES, ...JSON.parse(companySettings.attendanceRules) };
+    } catch {}
+  }
 
   // Determine active display record:
   // If yesterday has an open overnight shift (checked in, not checked out, within 22 hrs), it represents the active ongoing shift!
@@ -792,6 +954,20 @@ export async function getWorkerStatus(userId: string) {
       totalWeeklyBaseEarnings,
       totalWeeklyApprovedOvertime,
       totalWeeklyPendingOvertime,
+    },
+    geofenceConfig: {
+      enabled: activeRules.geofencingEnabled ?? true,
+      radiusMeters: Number(activeRules.geofenceRadiusMeters ?? DEFAULT_ATTENDANCE_RULES.geofenceRadiusMeters),
+      unit1: {
+        name: activeRules.unit1Name || DEFAULT_ATTENDANCE_RULES.unit1Name,
+        latitude: Number(activeRules.unit1Lat ?? DEFAULT_ATTENDANCE_RULES.unit1Lat),
+        longitude: Number(activeRules.unit1Lng ?? DEFAULT_ATTENDANCE_RULES.unit1Lng),
+      },
+      unit2: {
+        name: activeRules.unit2Name || DEFAULT_ATTENDANCE_RULES.unit2Name,
+        latitude: Number(activeRules.unit2Lat ?? DEFAULT_ATTENDANCE_RULES.unit2Lat),
+        longitude: Number(activeRules.unit2Lng ?? DEFAULT_ATTENDANCE_RULES.unit2Lng),
+      },
     },
   };
 }

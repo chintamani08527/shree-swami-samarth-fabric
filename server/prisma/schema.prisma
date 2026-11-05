@@ -76,6 +76,13 @@ model AttendanceRecord {
   overtimeApprovedBy String?   // Admin actor name who approved/rejected
   overtimeRejectionReason String?
   isMissingCheckOut Boolean   @default(false)
+  checkInLatitude   Float?
+  checkInLongitude  Float?
+  checkInLocationUnit String?   // Unit 1, Unit 2, or Outside
+  checkOutLatitude  Float?
+  checkOutLongitude Float?
+  checkOutLocationUnit String?   // Unit 1, Unit 2, or Outside
+  locationVerified  Boolean   @default(false)
   remarks           String?   // Notes, correction reasons, etc.
 
   createdAt         DateTime  @default(now())

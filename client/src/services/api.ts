@@ -68,7 +68,18 @@ export const authApi = {
 
 // 2. Attendance API
 export const attendanceApi = {
-  checkIn: (options?: { workerUserId?: string; shiftType?: 'DAY' | 'NIGHT' | string } | string) => {
+  verifyLocation: (latitude?: number | null, longitude?: number | null) =>
+    request<{ success: boolean; data: any }>('/attendance/verify-location', {
+      method: 'POST',
+      body: JSON.stringify({ latitude, longitude }),
+    }),
+
+  checkIn: (options?: {
+    workerUserId?: string;
+    shiftType?: 'DAY' | 'NIGHT' | string;
+    latitude?: number | null;
+    longitude?: number | null;
+  } | string) => {
     let payload: Record<string, any> = {};
     if (typeof options === 'string') {
       payload.workerUserId = options;
@@ -87,6 +98,8 @@ export const attendanceApi = {
     hoursOperated?: number;
     overtimeMachines?: number;
     overtimeHours?: number;
+    latitude?: number | null;
+    longitude?: number | null;
   } | string) => {
     let payload: Record<string, any> = {};
     if (typeof options === 'string') {

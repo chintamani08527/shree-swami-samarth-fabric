@@ -29,6 +29,8 @@ import { useAuth } from '../../context/AuthContext.tsx';
 import { useToast } from '../../context/ToastContext.tsx';
 import { attendanceApi } from '../../services/api.ts';
 import { WorkerTodayStatus, ShiftEarnings } from '../../types/index.ts';
+import { FactoryLocationMap } from '../../components/common/FactoryLocationMap.tsx';
+import { getCurrentGPSPosition, GPSPosition } from '../../utils/geo.ts';
 
 export const WorkerDashboard: React.FC = () => {
   const { user, logout } = useAuth();
@@ -40,6 +42,15 @@ export const WorkerDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [activeTimerSeconds, setActiveTimerSeconds] = useState<number>(0);
+
+  // Location & Geofencing state
+  const [currentGPS, setCurrentGPS] = useState<GPSPosition | null>(null);
+  const [locationStatus, setLocationStatus] = useState<'idle' | 'locating' | 'granted' | 'denied' | 'outside'>('idle');
+  const [distanceToUnit1, setDistanceToUnit1] = useState<number | null>(null);
+  const [distanceToUnit2, setDistanceToUnit2] = useState<number | null>(null);
+  const [isWithinPremises, setIsWithinPremises] = useState<boolean>(false);
+  const [detectedUnit, setDetectedUnit] = useState<string | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   // Check-Out Celebration & Rupees Animation state
   const [showCelebrationModal, setShowCelebrationModal] = useState(false);
@@ -110,8 +121,45 @@ export const WorkerDashboard: React.FC = () => {
     }
   };
 
+  // Refresh GPS Location and verify with factory geofences
+  const refreshGPSLocation = async (silent: boolean = false): Promise<GPSPosition | null> => {
+    try {
+      setLocationStatus('locating');
+      setLocationError(null);
+      const pos = await getCurrentGPSPosition(10000);
+      setCurrentGPS(pos);
+
+      const verifyRes = await attendanceApi.verifyLocation(pos.latitude, pos.longitude);
+      if (verifyRes.success) {
+        const d = verifyRes.data;
+        setDistanceToUnit1(d.distanceToUnit1);
+        setDistanceToUnit2(d.distanceToUnit2);
+        setIsWithinPremises(d.isWithinPremises);
+        setDetectedUnit(d.detectedUnit);
+        setLocationStatus(d.isWithinPremises ? 'granted' : 'outside');
+        if (!silent) {
+          if (d.isWithinPremises) {
+            showToast(`✅ ${d.detectedUnit} आवारात आहात (${d.nearestDistance}m अंतर)`, 'success');
+          } else {
+            showToast(`❌ फॅक्टरी आवाराबाहेर (${d.nearestDistance}m अंतर). कृपया आवारात या.`, 'error');
+          }
+        }
+      }
+      return pos;
+    } catch (err: any) {
+      setLocationStatus('denied');
+      const msg = err.message || 'लोकेशन मिळवता आले नाही.';
+      setLocationError(msg);
+      if (!silent) {
+        showToast(msg, 'error');
+      }
+      return null;
+    }
+  };
+
   useEffect(() => {
     loadData();
+    refreshGPSLocation(true);
   }, []);
 
   // Live timer for active working duration
@@ -145,7 +193,29 @@ export const WorkerDashboard: React.FC = () => {
   const handleCheckIn = async () => {
     try {
       setActionLoading(true);
-      const res = await attendanceApi.checkIn({ shiftType: selectedShift });
+
+      // Verify and acquire GPS position
+      let pos = currentGPS;
+      if (!pos || locationStatus === 'denied' || locationStatus === 'idle') {
+        pos = await refreshGPSLocation(false);
+      }
+
+      if (!pos) {
+        showToast('📍 कृपया आपल्या फोनचे लोकेशन (GPS) चालू करा आणि पुन्हा प्रयत्न करा.', 'error');
+        return;
+      }
+
+      if (statusData?.geofenceConfig?.enabled && !isWithinPremises) {
+        showToast('❌ तुम्ही फॅक्टरी आवारात नाही आहात. कृपया फॅक्टरी आवारात येऊन हजेरी नोंदवा.', 'error');
+        return;
+      }
+
+      const res = await attendanceApi.checkIn({
+        shiftType: selectedShift,
+        latitude: pos.latitude,
+        longitude: pos.longitude,
+      });
+
       if (res.success) {
         // Confetti celebration
         try {
@@ -288,7 +358,26 @@ export const WorkerDashboard: React.FC = () => {
   const handleDirectCheckOut = async () => {
     try {
       setActionLoading(true);
-      const res = await attendanceApi.checkOut();
+
+      let pos = currentGPS;
+      if (!pos || locationStatus === 'denied' || locationStatus === 'idle') {
+        pos = await refreshGPSLocation(false);
+      }
+
+      if (!pos) {
+        showToast('📍 कृपया आपल्या फोनचे लोकेशन (GPS) चालू करा आणि पुन्हा प्रयत्न करा.', 'error');
+        return;
+      }
+
+      if (statusData?.geofenceConfig?.enabled && !isWithinPremises) {
+        showToast('❌ तुम्ही फॅक्टरी आवारात नाही आहात. कृपया फॅक्टरी आवारात येऊन चेक आऊट करा.', 'error');
+        return;
+      }
+
+      const res = await attendanceApi.checkOut({
+        latitude: pos.latitude,
+        longitude: pos.longitude,
+      });
       if (res.success) {
         showToast(res.message, 'success');
         const dailyRate = statusData?.worker?.dailyWage || user?.dailyWage || 1000;
@@ -320,6 +409,22 @@ export const WorkerDashboard: React.FC = () => {
     e.preventDefault();
     try {
       setActionLoading(true);
+
+      let pos = currentGPS;
+      if (!pos || locationStatus === 'denied' || locationStatus === 'idle') {
+        pos = await refreshGPSLocation(false);
+      }
+
+      if (!pos) {
+        showToast('📍 कृपया आपल्या फोनचे लोकेशन (GPS) चालू करा आणि पुन्हा प्रयत्न करा.', 'error');
+        return;
+      }
+
+      if (statusData?.geofenceConfig?.enabled && !isWithinPremises) {
+        showToast('❌ तुम्ही फॅक्टरी आवारात नाही आहात. कृपया फॅक्टरी आवारात येऊन चेक आऊट करा.', 'error');
+        return;
+      }
+
       const isLoggingWork = hasCustomWageAccess || Boolean(machinesOperated);
       const isLoggingOT = hasOvertime || Boolean(overtimeMachines) || Boolean(overtimeHours);
       const res = await attendanceApi.checkOut({
@@ -327,6 +432,8 @@ export const WorkerDashboard: React.FC = () => {
         hoursOperated: isLoggingWork && hoursOperated ? parseFloat(hoursOperated) : undefined,
         overtimeMachines: isLoggingOT && overtimeMachines ? parseInt(overtimeMachines, 10) : undefined,
         overtimeHours: isLoggingOT && overtimeHours ? parseFloat(overtimeHours) : undefined,
+        latitude: pos.latitude,
+        longitude: pos.longitude,
       });
       if (res.success) {
         showToast(res.message, 'success');
@@ -550,6 +657,20 @@ export const WorkerDashboard: React.FC = () => {
         {/* TAB 1: HOME (ATTENDANCE ACTIONS) */}
         {currentTab === 'home' && (
           <div className="space-y-4">
+            {/* Interactive Factory Geofence Map & Live Radar */}
+            <FactoryLocationMap
+              geofenceConfig={statusData?.geofenceConfig}
+              currentPosition={currentGPS}
+              locationStatus={locationStatus}
+              distanceToUnit1={distanceToUnit1}
+              distanceToUnit2={distanceToUnit2}
+              detectedUnit={detectedUnit}
+              isWithinPremises={isWithinPremises}
+              errorMessage={locationError}
+              onRefreshLocation={() => refreshGPSLocation(false)}
+              onRequestPermission={() => refreshGPSLocation(false)}
+            />
+
             {/* Today's Status Card */}
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
               <div className="flex items-center justify-between mb-4">

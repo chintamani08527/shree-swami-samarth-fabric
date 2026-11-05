@@ -13,6 +13,7 @@ import {
   approveOvertime,
   rejectOvertime,
   bulkApproveOvertime,
+  verifyFactoryGeofence,
 } from '../services/attendance.service.js';
 import { authenticate } from '../middleware/auth.js';
 import { requireAdmin, requireSupervisorOrAdmin } from '../middleware/roles.js';
@@ -22,6 +23,20 @@ import { AttendanceSources, Roles } from '../config/index.js';
 const router = Router();
 
 router.use(authenticate);
+
+// 0. Verify worker location against factory geofence
+router.post('/verify-location', async (req: Request, res: Response) => {
+  try {
+    const { latitude, longitude } = req.body;
+    const result = await verifyFactoryGeofence(
+      latitude !== undefined && latitude !== null ? Number(latitude) : null,
+      longitude !== undefined && longitude !== null ? Number(longitude) : null
+    );
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
 
 // 1. Worker Check-In
 router.post('/check-in', async (req: Request, res: Response) => {
@@ -38,8 +53,13 @@ router.post('/check-in', async (req: Request, res: Response) => {
       adminActor = { id: req.user!.id, name: req.user!.name };
     }
 
+    const { latitude, longitude } = req.body;
+    const location = (latitude !== undefined && latitude !== null && longitude !== undefined && longitude !== null)
+      ? { latitude: Number(latitude), longitude: Number(longitude) }
+      : undefined;
+
     const shiftChoice = req.body.shiftType || req.body.shiftChoice;
-    const result = await processCheckIn(targetUserId, source, adminActor, shiftChoice);
+    const result = await processCheckIn(targetUserId, source, adminActor, shiftChoice, location);
 
     res.json({
       success: true,
@@ -69,6 +89,11 @@ router.post('/check-out', async (req: Request, res: Response) => {
       adminActor = { id: req.user!.id, name: req.user!.name };
     }
 
+    const { latitude, longitude } = req.body;
+    const location = (latitude !== undefined && latitude !== null && longitude !== undefined && longitude !== null)
+      ? { latitude: Number(latitude), longitude: Number(longitude) }
+      : undefined;
+
     const customDetails = {
       machinesOperated: req.body.machinesOperated !== undefined && req.body.machinesOperated !== null ? Number(req.body.machinesOperated) : undefined,
       hoursOperated: req.body.hoursOperated !== undefined && req.body.hoursOperated !== null ? Number(req.body.hoursOperated) : undefined,
@@ -76,7 +101,7 @@ router.post('/check-out', async (req: Request, res: Response) => {
       overtimeHours: req.body.overtimeHours !== undefined && req.body.overtimeHours !== null ? Number(req.body.overtimeHours) : undefined,
     };
 
-    const result = await processCheckOut(targetUserId, source, adminActor, customDetails);
+    const result = await processCheckOut(targetUserId, source, adminActor, customDetails, location);
 
     res.json({
       success: true,

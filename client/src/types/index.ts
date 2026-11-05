@@ -182,6 +182,20 @@ export interface WorkerTodayStatus {
     totalWeeklyApprovedOvertime?: number;
     totalWeeklyPendingOvertime?: number;
   };
+  geofenceConfig?: {
+    enabled: boolean;
+    radiusMeters: number;
+    unit1: {
+      name: string;
+      latitude: number;
+      longitude: number;
+    };
+    unit2: {
+      name: string;
+      latitude: number;
+      longitude: number;
+    };
+  } | null;
 }
 
 export interface DashboardWorkerItem {
@@ -272,6 +286,14 @@ export interface CompanySettingsData {
       fullDayThresholdHours: number;
       overtimeThresholdHours: number;
       dailyCutoffTime: string;
+      geofencingEnabled?: boolean;
+      geofenceRadiusMeters?: number;
+      unit1Name?: string;
+      unit1Lat?: number;
+      unit1Lng?: number;
+      unit2Name?: string;
+      unit2Lat?: number;
+      unit2Lng?: number;
     };
   };
   shifts: Shift[];
