@@ -515,6 +515,29 @@ export const advanceApi = {
       body: JSON.stringify({ status, rejectionReason }),
     }),
 
+  // Admin / Supervisor: Record custom cutting/deduction from advance
+  recordCustomDeduction: (
+    advanceId: string,
+    amount: number,
+    cutDate?: string,
+    notes?: string
+  ) =>
+    request<{
+      success: boolean;
+      message: string;
+      data: { deduction: any; advance: AdvanceRecord };
+    }>(`/advances/${advanceId}/deduct`, {
+      method: 'POST',
+      body: JSON.stringify({ amount, cutDate, notes }),
+    }),
+
+  // Admin: Delete / Revert an advance deduction
+  deleteDeduction: (deductionId: string) =>
+    request<{ success: boolean; message: string; data: AdvanceRecord }>(
+      `/advances/deductions/${deductionId}`,
+      { method: 'DELETE' }
+    ),
+
   // Admin: Delete advance
   deleteAdvance: (id: string) =>
     request<{ success: boolean; message: string }>(`/advances/${id}`, {

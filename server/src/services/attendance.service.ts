@@ -960,7 +960,10 @@ export async function getWorkerStatus(userId: string) {
 
   // Advance (उचल) summary calculations
   const activeAdvances = (userAdvances || []).filter((a: any) => a.status === 'ACTIVE');
-  const totalActiveAdvance = activeAdvances.reduce((sum: number, a: any) => sum + a.amount, 0);
+  const totalActiveAdvance = activeAdvances.reduce(
+    (sum: number, a: any) => sum + (a.balanceAmount != null ? a.balanceAmount : a.amount),
+    0
+  );
   const pendingAdvancesCount = (userAdvances || []).filter((a: any) => a.status === 'REQUESTED').length;
 
   return {
@@ -1032,6 +1035,8 @@ export async function getWorkerStatus(userId: string) {
       activeAdvances: activeAdvances.map((a: any) => ({
         id: a.id,
         amount: a.amount,
+        balanceAmount: a.balanceAmount != null ? a.balanceAmount : a.amount,
+        deductedAmount: a.deductedAmount ?? 0,
         advanceDate: a.advanceDate,
         paymentMode: a.paymentMode,
         reason: a.reason,

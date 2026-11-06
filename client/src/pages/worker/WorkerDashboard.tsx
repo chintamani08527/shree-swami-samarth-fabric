@@ -24,6 +24,8 @@ import {
   PlusCircle,
   Check,
   ArrowRight,
+  Scissors,
+  History,
 } from 'lucide-react';
 import { Logo } from '../../components/common/Logo.tsx';
 import { LiveClock } from '../../components/common/LiveClock.tsx';
@@ -1467,68 +1469,129 @@ export const WorkerDashboard: React.FC = () => {
                 </div>
               ) : (
                 <div className="divide-y divide-slate-100">
-                  {workerAdvances.map((adv) => (
-                    <div key={adv.id} className="py-3 flex items-start justify-between gap-3">
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-base font-black text-navy-950 font-mono">
-                            ₹{adv.amount.toLocaleString('en-IN')}
-                          </span>
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
-                            {adv.paymentMode === 'CASH'
-                              ? '💵 Cash'
-                              : adv.paymentMode === 'UPI'
-                              ? '📱 UPI'
-                              : '🏦 Bank'}
-                          </span>
+                  {workerAdvances.map((adv) => {
+                    const currentBalance = adv.balanceAmount != null ? adv.balanceAmount : (adv.status === 'DEDUCTED' ? 0 : adv.amount);
+                    const deductedAmount = adv.deductedAmount || (adv.status === 'DEDUCTED' ? adv.amount : 0);
+                    return (
+                      <div key={adv.id} className="py-3.5 space-y-2.5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-base font-black text-navy-950 font-mono">
+                                ₹{adv.status === 'ACTIVE' ? currentBalance.toLocaleString('en-IN') : adv.amount.toLocaleString('en-IN')}
+                              </span>
+                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
+                                {adv.paymentMode === 'CASH'
+                                  ? '💵 Cash'
+                                  : adv.paymentMode === 'UPI'
+                                  ? '📱 UPI'
+                                  : '🏦 Bank'}
+                              </span>
+                            </div>
+
+                            {/* Balance & Deduction summary details */}
+                            {adv.status === 'ACTIVE' && (deductedAmount > 0) && (
+                              <div className="text-[11px] text-slate-500 font-medium">
+                                मूळ उचल: <strong className="text-slate-700">₹{adv.amount.toLocaleString('en-IN')}</strong> • कपात झालेली: <strong className="text-rose-700 font-mono">₹{deductedAmount.toLocaleString('en-IN')}</strong>
+                              </div>
+                            )}
+
+                            <div className="text-xs text-slate-700 font-medium">
+                              {adv.reason || 'कामगार उचल'}
+                            </div>
+
+                            {adv.rejectionReason && (
+                              <div className="text-[11px] text-rose-600 font-medium">
+                                कारण: {adv.rejectionReason}
+                              </div>
+                            )}
+
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              उचल तारीख: {new Date(adv.advanceDate).toLocaleDateString('en-IN', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            {adv.status === 'ACTIVE' ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-teal-600 animate-pulse" />
+                                शिल्लक उचल
+                              </span>
+                            ) : adv.status === 'DEDUCTED' ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-300">
+                                <Check className="w-3 h-3 text-slate-600" />
+                                पगारातून वजा
+                              </span>
+                            ) : adv.status === 'REPAID' ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
+                                <CheckCircle2 className="w-3 h-3 text-blue-600" />
+                                रोख परतफेड
+                              </span>
+                            ) : adv.status === 'REQUESTED' ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-300 animate-pulse">
+                                <Clock className="w-3 h-3 text-amber-600" />
+                                मागणी प्रलंबित
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-200">
+                                <XCircle className="w-3 h-3 text-rose-600" />
+                                नाकारले
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-xs text-slate-700 font-medium">
-                          {adv.reason || 'कामगार उचल'}
-                        </div>
-                        {adv.rejectionReason && (
-                          <div className="text-[11px] text-rose-600 font-medium">
-                            कारण: {adv.rejectionReason}
+
+                        {/* CUSTOM CUTTING HISTORY LIST (कपात इतिहास) */}
+                        {adv.deductions && adv.deductions.length > 0 && (
+                          <div className="p-3 bg-slate-50/90 rounded-xl border border-slate-200 space-y-2 mt-2">
+                            <div className="flex items-center justify-between text-xs font-bold text-slate-700 border-b border-slate-200/70 pb-1.5">
+                              <span className="flex items-center gap-1.5 text-rose-800">
+                                <Scissors className="w-3.5 h-3.5 text-rose-600" />
+                                <span>कपात इतिहास (Cutting History)</span>
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-mono">
+                                {adv.deductions.length} {adv.deductions.length === 1 ? 'नोंद' : 'नोंदी'}
+                              </span>
+                            </div>
+
+                            <div className="divide-y divide-slate-200/60 text-xs">
+                              {adv.deductions.map((d) => (
+                                <div key={d.id} className="py-2 flex items-center justify-between gap-2">
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono font-black text-rose-700">
+                                        - ₹{d.amount.toLocaleString('en-IN')}
+                                      </span>
+                                      <span className="text-[10px] text-slate-400 font-mono">
+                                        {new Date(d.cutDate).toLocaleDateString('en-IN', {
+                                          day: '2-digit',
+                                          month: 'short',
+                                          year: 'numeric',
+                                        })}
+                                      </span>
+                                    </div>
+                                    <div className="text-[11px] text-slate-600 mt-0.5">
+                                      {d.notes || 'उचल कपात'}
+                                    </div>
+                                  </div>
+
+                                  {d.cutBy && (
+                                    <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                                      नोंद: {d.cutBy}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
-                        <div className="text-[10px] text-slate-400 font-mono">
-                          तारीख: {new Date(adv.advanceDate).toLocaleDateString('en-IN', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                          })}
-                        </div>
                       </div>
-
-                      <div className="text-right">
-                        {adv.status === 'ACTIVE' ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-teal-600 animate-pulse" />
-                            शिल्लक उचल
-                          </span>
-                        ) : adv.status === 'DEDUCTED' ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-300">
-                            <Check className="w-3 h-3 text-slate-600" />
-                            पगारातून वजा
-                          </span>
-                        ) : adv.status === 'REPAID' ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
-                            <CheckCircle2 className="w-3 h-3 text-blue-600" />
-                            रोख परतफेड
-                          </span>
-                        ) : adv.status === 'REQUESTED' ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-300 animate-pulse">
-                            <Clock className="w-3 h-3 text-amber-600" />
-                            मागणी प्रलंबित
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-200">
-                            <XCircle className="w-3 h-3 text-rose-600" />
-                            नाकारले
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

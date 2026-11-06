@@ -7,6 +7,8 @@ import {
   listAllAdvances,
   createAdvance,
   updateAdvanceStatus,
+  recordCustomDeduction,
+  deleteAdvanceDeduction,
   deleteAdvance,
 } from '../services/advance.service.js';
 
@@ -121,7 +123,47 @@ router.patch('/:id/status', requireAdmin, async (req: Request, res: Response) =>
   }
 });
 
-// 6. Admin: Delete advance record
+// 6. Admin / Supervisor: Record custom cutting/deduction from advance
+router.post('/:id/deduct', requireSupervisorOrAdmin, async (req: Request, res: Response) => {
+  try {
+    const { amount, cutDate, notes } = req.body;
+    if (!amount) {
+      return res.status(400).json({ success: false, message: 'कपात रक्कम आवश्यक आहे (Cutting amount required)' });
+    }
+
+    const result = await recordCustomDeduction({
+      advanceId: req.params.id,
+      amount: parseFloat(amount),
+      cutDate,
+      notes,
+      cutBy: req.user!.name || req.user!.workerId || 'Admin',
+    });
+
+    res.json({
+      success: true,
+      message: 'उचल कपात यशस्वीरीत्या नोंदवली (Advance deduction recorded)',
+      data: result,
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+// 7. Admin: Delete / Revert an advance deduction
+router.delete('/deductions/:id', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const updatedAdvance = await deleteAdvanceDeduction(req.params.id);
+    res.json({
+      success: true,
+      message: 'कपात नोंद रद्द केली (Deduction reverted successfully)',
+      data: updatedAdvance,
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+// 8. Admin: Delete advance record
 router.delete('/:id', requireAdmin, async (req: Request, res: Response) => {
   try {
     await deleteAdvance(req.params.id);

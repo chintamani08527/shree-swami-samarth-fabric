@@ -357,11 +357,24 @@ export interface OvertimeRequestsResponse {
   };
 }
 
+export interface AdvanceDeduction {
+  id: string;
+  advanceId: string;
+  userId: string;
+  amount: number;
+  cutDate: string;
+  notes?: string | null;
+  cutBy?: string | null;
+  createdAt: string;
+}
+
 export interface AdvanceRecord {
   id: string;
   userId: string;
   workerId: string;
   amount: number;
+  balanceAmount?: number | null;
+  deductedAmount?: number | null;
   advanceDate: string;
   paymentMode: 'CASH' | 'UPI' | 'BANK_TRANSFER' | string;
   status: 'ACTIVE' | 'DEDUCTED' | 'REPAID' | 'REQUESTED' | 'REJECTED' | string;
@@ -372,6 +385,7 @@ export interface AdvanceRecord {
   rejectionReason?: string | null;
   createdAt: string;
   updatedAt: string;
+  deductions?: AdvanceDeduction[];
   user?: {
     id: string;
     workerId: string;

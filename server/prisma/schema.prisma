@@ -31,6 +31,7 @@ model User {
   workerShifts      WorkerShift[]
   auditLogs         AuditLog[]
   advances          Advance[]
+  advanceDeductions AdvanceDeduction[]
 
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -164,26 +165,47 @@ model CompanySettings {
 }
 
 model Advance {
-  id              String    @id @default(uuid())
+  id              String             @id @default(uuid())
   userId          String
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   workerId        String
   amount          Float
-  advanceDate     String    // YYYY-MM-DD
-  paymentMode     String    @default("CASH") // CASH, UPI, BANK_TRANSFER
-  status          String    @default("ACTIVE") // ACTIVE, DEDUCTED, REPAID, REQUESTED, REJECTED
+  balanceAmount   Float?             @default(0)
+  deductedAmount  Float?             @default(0)
+  advanceDate     String             // YYYY-MM-DD
+  paymentMode     String             @default("CASH") // CASH, UPI, BANK_TRANSFER
+  status          String             @default("ACTIVE") // ACTIVE, DEDUCTED, REPAID, REQUESTED, REJECTED
   reason          String?
   approvedBy      String?
   approvedAt      DateTime?
   deductedAt      DateTime?
   rejectionReason String?
 
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  deductions      AdvanceDeduction[]
+
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
   @@index([userId])
   @@index([workerId])
   @@index([status])
   @@index([advanceDate])
   @@index([status, advanceDate])
+}
+
+model AdvanceDeduction {
+  id        String   @id @default(uuid())
+  advanceId String
+  advance   Advance  @relation(fields: [advanceId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Float    // Amount cut in this transaction (e.g. 2000)
+  cutDate   String   // YYYY-MM-DD
+  notes     String?  // e.g. "हप्ता कपात (Weekly cutting)", "पगारातून वजा"
+  cutBy     String?  // Admin/Supervisor name or ID
+  createdAt DateTime @default(now())
+
+  @@index([advanceId])
+  @@index([userId])
+  @@index([cutDate])
 }

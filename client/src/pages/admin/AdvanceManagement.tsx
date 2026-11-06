@@ -19,6 +19,8 @@ import {
   Banknote,
   Receipt,
   Check,
+  Scissors,
+  History,
 } from 'lucide-react';
 import { advanceApi, workersApi } from '../../services/api.ts';
 import { AdvanceRecord, AdvanceStats, User as WorkerUser } from '../../types/index.ts';
@@ -67,6 +69,19 @@ export const AdvanceManagement: React.FC = () => {
   const [rejectingAdvanceId, setRejectingAdvanceId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [submittingReject, setSubmittingReject] = useState(false);
+
+  // Custom Cutting Modal
+  const [cutModalOpen, setCutModalOpen] = useState(false);
+  const [cuttingAdvance, setCuttingAdvance] = useState<AdvanceRecord | null>(null);
+  const [cutAmount, setCutAmount] = useState('');
+  const [cutDate, setCutDate] = useState(new Date().toISOString().split('T')[0]);
+  const [cutNotes, setCutNotes] = useState('');
+  const [submittingCut, setSubmittingCut] = useState(false);
+
+  // Cutting History Modal
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [historyAdvance, setHistoryAdvance] = useState<AdvanceRecord | null>(null);
+  const [revertingDeductionId, setRevertingDeductionId] = useState<string | null>(null);
 
   // Action loading state
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -234,6 +249,81 @@ export const AdvanceManagement: React.FC = () => {
       showToast(err.message || 'नोंद हटवण्यात त्रुटी / Failed to delete advance', 'error');
     } finally {
       setActionLoadingId(null);
+    }
+  };
+
+  // Open Custom Cut Modal
+  const handleOpenCutModal = (adv: AdvanceRecord) => {
+    setCuttingAdvance(adv);
+    setCutAmount('');
+    setCutNotes('');
+    setCutDate(new Date().toISOString().split('T')[0]);
+    setCutModalOpen(true);
+  };
+
+  // Submit Custom Cutting
+  const handleCutSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cuttingAdvance) return;
+    const amountNum = parseFloat(cutAmount);
+    const maxBalance = cuttingAdvance.balanceAmount != null ? cuttingAdvance.balanceAmount : cuttingAdvance.amount;
+    if (isNaN(amountNum) || amountNum <= 0) {
+      showToast('कृपया वैध कपात रक्कम प्रविष्ट करा / Enter valid cutting amount', 'error');
+      return;
+    }
+    if (amountNum > maxBalance) {
+      showToast(`कपात रक्कम शिल्लक उचलीपेक्षा (₹${maxBalance}) जास्त असू शकत नाही`, 'error');
+      return;
+    }
+
+    try {
+      setSubmittingCut(true);
+      const res = await advanceApi.recordCustomDeduction(
+        cuttingAdvance.id,
+        amountNum,
+        cutDate,
+        cutNotes.trim() || undefined
+      );
+      if (res.success) {
+        showToast(res.message || 'कपात यशस्वीरीत्या नोंदवली / Deduction recorded successfully', 'success');
+        setCutModalOpen(false);
+        setCuttingAdvance(null);
+        await loadAdvances();
+      }
+    } catch (err: any) {
+      showToast(err.message || 'कपात नोंदवण्यात त्रुटी आली / Failed to record deduction', 'error');
+    } finally {
+      setSubmittingCut(false);
+    }
+  };
+
+  // Open History Modal
+  const handleOpenHistoryModal = (adv: AdvanceRecord) => {
+    setHistoryAdvance(adv);
+    setHistoryModalOpen(true);
+  };
+
+  // Revert / Delete Deduction
+  const handleRevertDeduction = async (deductionId: string) => {
+    if (!window.confirm('ही कपात नोंद खरोखर रद्द करायची आहे का? (Are you sure you want to revert this deduction?)')) {
+      return;
+    }
+    try {
+      setRevertingDeductionId(deductionId);
+      const res = await advanceApi.deleteDeduction(deductionId);
+      if (res.success) {
+        showToast('कपात नोंद रद्द केली व रक्कम उचलीत पुन्हा जमा झाली / Deduction reverted', 'success');
+        await loadAdvances();
+        if (res.data) {
+          setHistoryAdvance(res.data);
+        } else {
+          setHistoryModalOpen(false);
+        }
+      }
+    } catch (err: any) {
+      showToast(err.message || 'कपात रद्द करण्यात त्रुटी आली / Failed to revert deduction', 'error');
+    } finally {
+      setRevertingDeductionId(null);
     }
   };
 
@@ -668,9 +758,26 @@ export const AdvanceManagement: React.FC = () => {
 
                       {/* Amount */}
                       <td className="py-3 px-3 whitespace-nowrap">
-                        <span className="text-sm font-black text-navy-950">
+                        <span className="text-sm font-black text-navy-950 block">
                           ₹{adv.amount.toLocaleString('en-IN')}
                         </span>
+                        {adv.status === 'ACTIVE' && (
+                          <div className="text-[10px] space-y-0.5 mt-0.5">
+                            <span className="text-rose-700 font-bold block">
+                              शिल्लक: ₹{(adv.balanceAmount ?? adv.amount).toLocaleString('en-IN')}
+                            </span>
+                            {(adv.deductedAmount || 0) > 0 && (
+                              <span className="text-slate-500 font-medium block">
+                                कपात: ₹{(adv.deductedAmount || 0).toLocaleString('en-IN')}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {adv.status === 'DEDUCTED' && (
+                          <span className="text-[10px] text-slate-500 block">
+                            पूर्ण कपात (Deducted)
+                          </span>
+                        )}
                       </td>
 
                       {/* Payment Mode */}
@@ -683,6 +790,16 @@ export const AdvanceManagement: React.FC = () => {
                         <span className="text-slate-800 font-medium block truncate" title={adv.reason || ''}>
                           {adv.reason || '—'}
                         </span>
+                        {adv.deductions && adv.deductions.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenHistoryModal(adv)}
+                            className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-teal-800 bg-teal-50 hover:bg-teal-100 px-2 py-0.5 rounded border border-teal-200 transition-colors"
+                          >
+                            <History className="w-3 h-3 text-teal-600" />
+                            <span>कपात नोंदी ({adv.deductions.length})</span>
+                          </button>
+                        )}
                         {adv.rejectionReason && (
                           <span className="text-[10px] text-rose-600 block mt-0.5">
                             Rejection Note: {adv.rejectionReason}
@@ -703,23 +820,44 @@ export const AdvanceManagement: React.FC = () => {
                       {/* Actions */}
                       <td className="py-3 px-3 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* If ACTIVE: Can Mark Deducted from Salary or Mark Repaid in Cash */}
+                          {/* If ACTIVE: Cut Advance is primary, plus history, full deduction and repayment */}
                           {adv.status === 'ACTIVE' && (
                             <>
+                              <button
+                                onClick={() => handleOpenCutModal(adv)}
+                                disabled={isActionLoading}
+                                className="px-2.5 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs transition-colors flex items-center gap-1 shadow-xs"
+                                title="कस्टम उचल कपात नोंदवा (Record custom advance cutting)"
+                              >
+                                <Scissors className="w-3 h-3" />
+                                <span>कपात नोंदवा</span>
+                              </button>
+
+                              {adv.deductions && adv.deductions.length > 0 && (
+                                <button
+                                  onClick={() => handleOpenHistoryModal(adv)}
+                                  className="px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors flex items-center gap-1"
+                                  title="कपात इतिहास पहा (View deduction history)"
+                                >
+                                  <History className="w-3 h-3 text-slate-600" />
+                                  <span className="hidden sm:inline">इतिहास ({adv.deductions.length})</span>
+                                </button>
+                              )}
+
                               <button
                                 onClick={() =>
                                   handleUpdateStatus(
                                     adv.id,
                                     'DEDUCTED',
-                                    `₹${adv.amount} पगारातून वजा म्हणून नोंदवले! / Marked as Deducted from salary.`
+                                    `₹${adv.balanceAmount ?? adv.amount} पूर्ण पगारातून वजा म्हणून नोंदवले! / Marked as Deducted from salary.`
                                   )
                                 }
                                 disabled={isActionLoading}
-                                className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors flex items-center gap-1"
-                                title="Mark as Deducted from salary (पगारातून वजा करा)"
+                                className="px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-xs transition-colors flex items-center gap-1"
+                                title="पूर्ण शिल्लक पगारातून वजा करा"
                               >
-                                <Check className="w-3 h-3 text-slate-600" />
-                                <span>पगारातून वजा</span>
+                                <Check className="w-3 h-3 text-slate-500" />
+                                <span className="hidden sm:inline">पूर्ण वजा</span>
                               </button>
 
                               <button
@@ -727,15 +865,15 @@ export const AdvanceManagement: React.FC = () => {
                                   handleUpdateStatus(
                                     adv.id,
                                     'REPAID',
-                                    `₹${adv.amount} रोख परतफेड म्हणून नोंदवले! / Marked as Repaid.`
+                                    `₹${adv.balanceAmount ?? adv.amount} रोख परतफेड म्हणून नोंदवले! / Marked as Repaid.`
                                   )
                                 }
                                 disabled={isActionLoading}
-                                className="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs transition-colors flex items-center gap-1"
-                                title="Mark as Repaid in cash (रोख परतफेड)"
+                                className="px-2 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-xs transition-colors flex items-center gap-1"
+                                title="रोख परतफेड (Mark as Repaid in cash)"
                               >
                                 <RotateCcw className="w-3 h-3 text-blue-600" />
-                                <span>परतफेड</span>
+                                <span className="hidden sm:inline">परतफेड</span>
                               </button>
                             </>
                           )}
@@ -850,25 +988,25 @@ export const AdvanceManagement: React.FC = () => {
               </span>
               <input
                 type="number"
-                min="10"
-                step="50"
+                min="1"
+                step="any"
                 value={advanceAmount}
                 onChange={(e) => setAdvanceAmount(e.target.value)}
-                placeholder="उदा. 2000"
+                placeholder="उदा. 30000 किंवा 2000"
                 required
                 className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 text-base font-black text-navy-950 focus:outline-none focus:ring-2 focus:ring-teal-600/40 font-mono"
               />
             </div>
             {/* Quick Amount Suggestion Chips */}
             <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-              {[500, 1000, 2000, 3000, 5000].map((quick) => (
+              {[1000, 2000, 5000, 10000, 20000, 30000].map((quick) => (
                 <button
                   type="button"
                   key={quick}
                   onClick={() => setAdvanceAmount(String(quick))}
                   className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-700 border border-slate-200 transition-colors"
                 >
-                  ₹{quick}
+                  ₹{quick.toLocaleString('en-IN')}
                 </button>
               ))}
             </div>
@@ -998,6 +1136,234 @@ export const AdvanceManagement: React.FC = () => {
             </button>
           </div>
         </div>
+      </Modal>
+
+      {/* MODAL 3: CUSTOM CUT ADVANCE (कस्टम उचल कपात) */}
+      <Modal
+        isOpen={cutModalOpen}
+        onClose={() => !submittingCut && setCutModalOpen(false)}
+        title="Cut Advance • उचल कपात नोंदवा"
+      >
+        {cuttingAdvance && (() => {
+          const currentBalance = cuttingAdvance.balanceAmount != null ? cuttingAdvance.balanceAmount : cuttingAdvance.amount;
+          const deductedSoFar = cuttingAdvance.deductedAmount || 0;
+          return (
+            <form onSubmit={handleCutSubmit} className="space-y-4">
+              {/* Worker info card */}
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs text-slate-500 font-medium">कामगार (Worker):</span>
+                    <strong className="text-sm font-bold text-navy-950 block">
+                      {cuttingAdvance.user?.name || cuttingAdvance.workerId}
+                    </strong>
+                    <span className="text-[11px] font-mono text-slate-500">
+                      ID: {cuttingAdvance.workerId} • {cuttingAdvance.user?.unit || 'Unit 1'}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Advance</span>
+                    <span className="text-sm font-mono font-bold text-navy-950">
+                      ₹{cuttingAdvance.amount.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mt-3 pt-2.5 border-t border-slate-200 text-xs">
+                  <div className="p-2 bg-slate-100 rounded-lg">
+                    <span className="text-slate-500 text-[11px] block">Already Cut (कपात झालेली):</span>
+                    <strong className="text-slate-700 font-mono font-bold">
+                      ₹{deductedSoFar.toLocaleString('en-IN')}
+                    </strong>
+                  </div>
+                  <div className="p-2 bg-rose-50 border border-rose-200 rounded-lg">
+                    <span className="text-rose-700 text-[11px] font-bold block">Remaining Balance (शिल्लक):</span>
+                    <strong className="text-rose-900 font-mono font-black text-sm">
+                      ₹{currentBalance.toLocaleString('en-IN')}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cut Amount Input */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
+                  Cutting Amount • कपात रक्कम (₹) *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-base">
+                    ₹
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    max={currentBalance}
+                    step="any"
+                    value={cutAmount}
+                    onChange={(e) => setCutAmount(e.target.value)}
+                    placeholder={`उदा. 2000 (जास्तीत जास्त ₹${currentBalance})`}
+                    required
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 text-base font-black text-navy-950 focus:outline-none focus:ring-2 focus:ring-teal-600/40 font-mono"
+                  />
+                </div>
+                {/* Quick Cutting Chips */}
+                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setCutAmount(String(currentBalance))}
+                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 transition-colors"
+                  >
+                    पूर्ण शिल्लक (₹{currentBalance})
+                  </button>
+                  {[500, 1000, 2000, 3000, 5000].filter((q) => q < currentBalance).map((quick) => (
+                    <button
+                      type="button"
+                      key={quick}
+                      onClick={() => setCutAmount(String(quick))}
+                      className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-700 border border-slate-200 transition-colors"
+                    >
+                      ₹{quick.toLocaleString('en-IN')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cut Date & Notes */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
+                    Cut Date • कपात तारीख *
+                  </label>
+                  <input
+                    type="date"
+                    value={cutDate}
+                    onChange={(e) => setCutDate(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600/40 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
+                    Notes / Reason • कपातीची नोंद
+                  </label>
+                  <input
+                    type="text"
+                    value={cutNotes}
+                    onChange={(e) => setCutNotes(e.target.value)}
+                    placeholder="उदा. हप्ता १ / आठवडा पगार कपात"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600/40"
+                  />
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setCutModalOpen(false)}
+                  disabled={submittingCut}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold text-xs"
+                >
+                  रद्द करा (Cancel)
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingCut}
+                  className="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs flex items-center gap-2 shadow-sm disabled:opacity-50"
+                >
+                  <Scissors className="w-3.5 h-3.5" />
+                  <span>{submittingCut ? 'कपात नोंदवत आहे...' : 'कपात लागू करा (Apply Cutting)'}</span>
+                </button>
+              </div>
+            </form>
+          );
+        })()}
+      </Modal>
+
+      {/* MODAL 4: CUTTING HISTORY (कपात इतिहास) */}
+      <Modal
+        isOpen={historyModalOpen}
+        onClose={() => setHistoryModalOpen(false)}
+        title="Cutting History • उचल कपात इतिहास"
+        maxWidth="md"
+      >
+        {historyAdvance && (
+          <div className="space-y-4">
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+              <div>
+                <strong className="text-sm font-bold text-navy-950 block">
+                  {historyAdvance.user?.name || historyAdvance.workerId}
+                </strong>
+                <span className="text-slate-500 font-mono">
+                  {historyAdvance.workerId} • मूळ उचल: ₹{historyAdvance.amount.toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-slate-500 block text-[10px] uppercase font-bold">शिल्लक रक्कम</span>
+                <span className="text-sm font-mono font-black text-rose-900">
+                  ₹{(historyAdvance.balanceAmount ?? (historyAdvance.status === 'DEDUCTED' ? 0 : historyAdvance.amount)).toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+
+            {(!historyAdvance.deductions || historyAdvance.deductions.length === 0) ? (
+              <div className="py-8 text-center text-slate-400 text-xs">
+                या उचलीतून अद्याप कोणतीही कपात झालेली नाही.
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
+                {historyAdvance.deductions.map((d) => (
+                  <div key={d.id} className="py-2.5 flex items-center justify-between gap-3 text-xs">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-black text-rose-800 text-sm">
+                          - ₹{d.amount.toLocaleString('en-IN')}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400">
+                          {new Date(d.cutDate).toLocaleDateString('en-IN', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                          })}
+                        </span>
+                      </div>
+                      <div className="text-slate-600 text-[11px] mt-0.5">
+                        {d.notes || 'उचल कपात'}
+                      </div>
+                      {d.cutBy && (
+                        <div className="text-[10px] text-slate-400">
+                          नोंद: {d.cutBy}
+                        </div>
+                      )}
+                    </div>
+
+                    {isAdmin && (
+                      <button
+                        onClick={() => handleRevertDeduction(d.id)}
+                        disabled={revertingDeductionId === d.id}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors text-[11px] flex items-center gap-1 font-semibold"
+                        title="Revert this deduction (कपात रद्द करा)"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">रद्द करा</span>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="pt-3 border-t border-slate-100 text-right">
+              <button
+                type="button"
+                onClick={() => setHistoryModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs"
+              >
+                बंद करा (Close)
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );
