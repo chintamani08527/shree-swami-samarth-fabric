@@ -53,10 +53,6 @@ export const WorkerDashboard: React.FC = () => {
   const [advanceTotalActive, setAdvanceTotalActive] = useState<number>(0);
   const [advanceTotalDeducted, setAdvanceTotalDeducted] = useState<number>(0);
   const [advanceTotalRepaid, setAdvanceTotalRepaid] = useState<number>(0);
-  const [requestAdvanceModalOpen, setRequestAdvanceModalOpen] = useState(false);
-  const [requestAmount, setRequestAmount] = useState<string>('');
-  const [requestReason, setRequestReason] = useState<string>('');
-  const [submittingAdvanceRequest, setSubmittingAdvanceRequest] = useState(false);
 
   // Location & Geofencing state
   const [currentGPS, setCurrentGPS] = useState<GPSPosition | null>(null);
@@ -137,31 +133,6 @@ export const WorkerDashboard: React.FC = () => {
       showToast(err.message || 'Failed to refresh attendance data', 'error');
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Submit Advance Request to Admin
-  const handleSubmitAdvanceRequest = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const amt = parseFloat(requestAmount);
-    if (isNaN(amt) || amt <= 0) {
-      showToast('कृपया योग्य उचल रक्कम टाका / Please enter a valid amount', 'error');
-      return;
-    }
-    try {
-      setSubmittingAdvanceRequest(true);
-      const res = await advanceApi.requestAdvance(amt, requestReason.trim() || undefined);
-      if (res.success) {
-        showToast(res.message || 'उचल मागणी पाठवली गेली! ॲडमिन मंजुरीनंतर सक्रिय होईल.', 'success');
-        setRequestAdvanceModalOpen(false);
-        setRequestAmount('');
-        setRequestReason('');
-        await loadData();
-      }
-    } catch (err: any) {
-      showToast(err.message || 'उचल मागणी पाठवण्यात त्रुटी / Failed to submit request', 'error');
-    } finally {
-      setSubmittingAdvanceRequest(false);
     }
   };
 
@@ -1077,7 +1048,7 @@ export const WorkerDashboard: React.FC = () => {
                   </div>
                 )}
 
-                {/* Advance Taken (उचल) & Net Payable Wage Breakdown */}
+                {/* Active Advance Taken (उचल) Breakdown */}
                 {((statusData?.advancesSummary?.totalActiveAdvance ?? advanceTotalActive) > 0) ? (
                   <div className="mt-3 pt-2.5 border-t border-emerald-200/80 space-y-2">
                     <div className="flex items-center justify-between text-xs">
@@ -1090,26 +1061,12 @@ export const WorkerDashboard: React.FC = () => {
                       </span>
                     </div>
 
-                    <div className="p-2.5 bg-emerald-100/90 rounded-xl border border-emerald-300 flex items-center justify-between">
-                      <div>
-                        <span className="text-[10px] font-extrabold text-emerald-900 uppercase tracking-wider block">
-                          Net Payable Salary • उर्वरित पगार
-                        </span>
-                        <span className="text-[10px] text-emerald-700 font-medium">
-                          (एकूण पगार - उचल वजावट)
-                        </span>
-                      </div>
-                      <div className="text-xl font-black text-emerald-950 font-mono">
-                        ₹{(statusData?.advancesSummary?.netPayableWeekly ?? Math.max(0, (statusData?.weeklySummary?.totalWeeklyEarnings ?? 0) - (statusData?.advancesSummary?.totalActiveAdvance ?? advanceTotalActive))).toLocaleString('en-IN')}
-                      </div>
-                    </div>
-
                     <button
                       type="button"
                       onClick={() => setCurrentTab('advance')}
                       className="w-full py-1.5 px-3 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 text-[11px] font-bold border border-teal-200 flex items-center justify-center gap-1 transition-colors"
                     >
-                      <span>उचल तपशील व नवीन मागणी पहा (View Advance Details) →</span>
+                      <span>उचल तपशील पहा (View Advance Details) →</span>
                     </button>
                   </div>
                 ) : (
@@ -1463,80 +1420,23 @@ export const WorkerDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Quick KPI Balance Cards */}
-            <div className="grid grid-cols-2 gap-3">
-              {/* 1. Active Outstanding Advance */}
-              <div className="bg-white p-4 rounded-2xl border-2 border-rose-200 shadow-sm space-y-1">
-                <div className="flex items-center justify-between text-rose-800">
-                  <span className="text-[11px] font-bold uppercase tracking-wider">
-                    Active Advance • शिल्लक उचल
-                  </span>
-                  <IndianRupee className="w-4 h-4 text-rose-600" />
-                </div>
-                <div className="text-2xl sm:text-3xl font-black text-rose-950 font-mono">
-                  ₹{(statusData?.advancesSummary?.totalActiveAdvance ?? advanceTotalActive).toLocaleString('en-IN')}
-                </div>
-                <div className="text-[10px] text-rose-700 font-medium">
-                  पगारातून वजा केली जाईल (Will be deducted)
+            {/* Active Outstanding Advance Card */}
+            <div className="bg-white p-5 rounded-2xl border-2 border-rose-200 shadow-sm space-y-1">
+              <div className="flex items-center justify-between text-rose-800">
+                <span className="text-xs font-bold uppercase tracking-wider">
+                  Active Advance • शिल्लक उचल
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-rose-50 flex items-center justify-center text-rose-600 font-bold">
+                  ₹
                 </div>
               </div>
-
-              {/* 2. Estimated Net Payable Wages */}
-              <div className="bg-white p-4 rounded-2xl border-2 border-emerald-200 shadow-sm space-y-1">
-                <div className="flex items-center justify-between text-emerald-800">
-                  <span className="text-[11px] font-bold uppercase tracking-wider">
-                    Net Salary • उर्वरित पगार
-                  </span>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                </div>
-                <div className="text-2xl sm:text-3xl font-black text-emerald-950 font-mono">
-                  ₹{(statusData?.advancesSummary?.netPayableWeekly ?? Math.max(0, (statusData?.weeklySummary?.totalWeeklyEarnings ?? 0) - (statusData?.advancesSummary?.totalActiveAdvance ?? advanceTotalActive))).toLocaleString('en-IN')}
-                </div>
-                <div className="text-[10px] text-emerald-700 font-medium">
-                  या आठवड्याचा एकूण पगार - उचल
-                </div>
+              <div className="text-3xl sm:text-4xl font-black text-rose-950 font-mono mt-1">
+                ₹{(statusData?.advancesSummary?.totalActiveAdvance ?? advanceTotalActive).toLocaleString('en-IN')}
+              </div>
+              <div className="text-xs text-rose-700 font-medium">
+                पगारातून वजा केली जाईल (Will be deducted from salary)
               </div>
             </div>
-
-            {/* Primary Action: Request Advance Button */}
-            <button
-              type="button"
-              onClick={() => setRequestAdvanceModalOpen(true)}
-              className="w-full py-3.5 px-4 rounded-2xl bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-sm sm:text-base shadow-md shadow-teal-700/25 flex items-center justify-center gap-2 transition-all tap-active"
-            >
-              <PlusCircle className="w-5 h-5" />
-              <span>Request New Advance • नवीन उचल मागणी करा</span>
-            </button>
-
-            {/* Pending Requests Alert Notice (If worker has requested advance) */}
-            {workerAdvances.some((a) => a.status === 'REQUESTED') && (
-              <div className="p-4 bg-amber-50 rounded-2xl border-2 border-amber-300 shadow-2xs space-y-2">
-                <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
-                  <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
-                  <span>उचल मागणी प्रलंबित आहे (Pending Admin Approval)</span>
-                </div>
-                {workerAdvances
-                  .filter((a) => a.status === 'REQUESTED')
-                  .map((req) => (
-                    <div key={req.id} className="p-2.5 bg-white rounded-xl border border-amber-200 text-xs text-amber-950 flex items-center justify-between">
-                      <div>
-                        <span className="font-extrabold text-sm text-navy-950 block">
-                          ₹{req.amount.toLocaleString('en-IN')}
-                        </span>
-                        <span className="text-[11px] text-slate-600">
-                          {req.reason || 'कोणतेही कारण नमूद नाही'}
-                        </span>
-                      </div>
-                      <span className="text-[10px] font-bold bg-amber-100 text-amber-900 px-2.5 py-1 rounded-full border border-amber-300 font-mono">
-                        {new Date(req.advanceDate).toLocaleDateString('en-IN')}
-                      </span>
-                    </div>
-                  ))}
-                <p className="text-[11px] text-amber-800">
-                  व्यवस्थापकांनी (Admin) ही मागणी मंजूर केल्यावर रक्कम आपल्या शिल्लक उचलीत जमा होईल.
-                </p>
-              </div>
-            )}
 
             {/* Advance History List */}
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-3">
@@ -2241,103 +2141,6 @@ export const WorkerDashboard: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Worker Request Advance Modal */}
-      <Modal
-        isOpen={requestAdvanceModalOpen}
-        onClose={() => !submittingAdvanceRequest && setRequestAdvanceModalOpen(false)}
-        title="Request Advance • उचल मागणी पाठवा"
-      >
-        <form onSubmit={handleSubmitAdvanceRequest} className="space-y-4">
-          <p className="text-xs text-slate-600">
-            आपणास आवश्यक असणारी उचल रक्कम व कारण प्रविष्ट करा. ही मागणी थेट फॅक्टरी व्यवस्थापकांकडे (Admin) मंजुरीसाठी पाठवली जाईल.
-          </p>
-
-          {/* Amount Input */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
-              Advance Amount • उचल हवी असलेली रक्कम (₹) *
-            </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-base">
-                ₹
-              </span>
-              <input
-                type="number"
-                min="100"
-                step="50"
-                value={requestAmount}
-                onChange={(e) => setRequestAmount(e.target.value)}
-                placeholder="उदा. 2000"
-                required
-                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 text-lg font-black text-navy-950 focus:outline-none focus:ring-2 focus:ring-teal-600/40 font-mono"
-              />
-            </div>
-
-            {/* Quick Amount Chips */}
-            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-              {[500, 1000, 2000, 3000, 5000].map((quick) => (
-                <button
-                  type="button"
-                  key={quick}
-                  onClick={() => setRequestAmount(String(quick))}
-                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-700 border border-slate-200 transition-colors"
-                >
-                  ₹{quick}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Reason Input */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
-              Reason / Purpose • उचल घेण्याचे कारण (पर्यायी)
-            </label>
-            <input
-              type="text"
-              value={requestReason}
-              onChange={(e) => setRequestReason(e.target.value)}
-              placeholder="उदा. वैद्यकीय खर्च, कौटुंबिक अडचण, सण..."
-              className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600/40"
-            />
-          </div>
-
-          <div className="p-3 bg-teal-50 rounded-xl border border-teal-200 text-xs text-teal-900 space-y-1">
-            <div className="font-bold">नोंद:</div>
-            <div>मंजूर झालेली उचल रक्कम आपल्या पुढील आठवड्याच्या पगारातून वजा केली जाईल.</div>
-          </div>
-
-          {/* Actions */}
-          <div className="pt-2 border-t border-slate-200 flex items-center justify-end gap-2.5">
-            <button
-              type="button"
-              onClick={() => setRequestAdvanceModalOpen(false)}
-              disabled={submittingAdvanceRequest}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold text-xs"
-            >
-              रद्द करा / Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={submittingAdvanceRequest}
-              className="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-xs shadow-md shadow-teal-700/25 flex items-center gap-2 tap-active disabled:opacity-50"
-            >
-              {submittingAdvanceRequest ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>मागणी पाठवत आहे...</span>
-                </>
-              ) : (
-                <>
-                  <PlusCircle className="w-4 h-4" />
-                  <span>Send Request • उचल मागणी पाठवा</span>
-                </>
-              )}
-            </button>
-          </div>
-        </form>
-      </Modal>
 
       {/* Worker Mobile Bottom Navigation */}
       <WorkerBottomNav currentTab={currentTab} onSelectTab={(tab: any) => setCurrentTab(tab)} />
