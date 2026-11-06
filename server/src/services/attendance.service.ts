@@ -379,28 +379,39 @@ export function calculateShiftEarnings(
   let baseEarned = 0;
   let overtimeEarned = 0;
 
-  const rawHours = Number((workingMinutes / 60).toFixed(1));
+  const rawHours = Number((workingMinutes / 60).toFixed(2));
   const defaultShiftHours = 12.0;
-  const hoursWorked = rawHours > 0 ? rawHours : defaultShiftHours;
+  const hoursWorked = (record.hoursOperated !== null && record.hoursOperated !== undefined && record.hoursOperated > 0)
+    ? record.hoursOperated
+    : (rawHours > 0 ? rawHours : defaultShiftHours);
 
   const otM = record.overtimeMachines ?? 0;
   const otH = record.overtimeHours ?? Number(((record.overtimeMinutes || 0) / 60).toFixed(1));
 
+  let m = 0;
+  let h = hoursWorked;
+
   if (isCustom) {
     const rate = user.customWageRate || 0;
-    const m = record.machinesOperated ?? (workingMinutes > 0 ? 1 : 2);
-    const h = record.hoursOperated ?? hoursWorked;
+    m = (record.machinesOperated !== null && record.machinesOperated !== undefined && record.machinesOperated > 0)
+      ? record.machinesOperated
+      : 1;
     baseEarned = Math.round(m * h * rate);
 
     if (otM > 0 && otH > 0) {
       overtimeEarned = Math.round(otM * otH * rate);
     } else if (otH > 0) {
-      overtimeEarned = Math.round(otH * rate * (m || 1));
+      overtimeEarned = Math.round(otH * rate * m);
     }
   } else {
     // Fixed daily wage worker: Full shift pay (e.g. ₹1000)
     const dailyRate = user.dailyWage || 1000;
-    baseEarned = Math.round(dailyRate);
+    m = record.machinesOperated ?? 0;
+    if (status === 'HALF_DAY') {
+      baseEarned = Math.round(dailyRate / 2);
+    } else {
+      baseEarned = Math.round(dailyRate);
+    }
 
     if (otH > 0) {
       const hourlyRate = dailyRate / 12; // 12-hour factory shift
@@ -418,6 +429,10 @@ export function calculateShiftEarnings(
   // If pending or rejected: only regular base pay is in totalEarned.
   const totalEarned = isOvertimeApproved ? Math.max(0, baseEarned + overtimeEarned) : Math.max(0, baseEarned);
 
+  const formula = isCustom
+    ? `${m} Loom(s) × ${h} hrs @ ₹${user.customWageRate || 0}/mc/hr`
+    : `Daily Wage ₹${user.dailyWage || 1000}`;
+
   return {
     totalEarned,
     baseEarned,
@@ -431,12 +446,13 @@ export function calculateShiftEarnings(
     wageType: isCustom ? 'CUSTOM' : 'FIXED',
     customRate: user.customWageRate ? Number(user.customWageRate.toFixed(2)) : 0,
     dailyWage: user.dailyWage || 1000,
-    machinesOperated: record.machinesOperated ?? (isCustom ? 1 : 0),
-    hoursOperated: record.hoursOperated ?? hoursWorked,
+    machinesOperated: m,
+    hoursOperated: h,
     overtimeMachines: otM,
     overtimeHours: otH,
     shiftType: record.shiftType || 'DAY',
     status,
+    formula,
   };
 }
 
@@ -582,12 +598,12 @@ export async function processCheckOut(
       lateMinutes: calc.lateMinutes,
       status: calc.status,
       isMissingCheckOut: false,
-      ...(customDetails?.machinesOperated !== undefined && customDetails.machinesOperated !== null
-        ? { machinesOperated: Number(customDetails.machinesOperated) }
-        : {}),
-      ...(customDetails?.hoursOperated !== undefined && customDetails.hoursOperated !== null
-        ? { hoursOperated: Number(customDetails.hoursOperated) }
-        : {}),
+      machinesOperated: (customDetails?.machinesOperated !== undefined && customDetails.machinesOperated !== null)
+        ? Number(customDetails.machinesOperated)
+        : (record.machinesOperated ?? (user.wageType === 'CUSTOM' || user.hasCustomWageAccess ? 1 : null)),
+      hoursOperated: (customDetails?.hoursOperated !== undefined && customDetails.hoursOperated !== null)
+        ? Number(customDetails.hoursOperated)
+        : (record.hoursOperated ?? calc.workingHours),
       ...(customDetails?.overtimeMachines !== undefined && customDetails.overtimeMachines !== null
         ? { overtimeMachines: Number(customDetails.overtimeMachines) }
         : {}),
@@ -888,25 +904,32 @@ export async function getWorkerStatus(userId: string) {
   let totalWeeklyBaseEarnings = 0;
   let totalWeeklyApprovedOvertime = 0;
   let totalWeeklyPendingOvertime = 0;
+  let completedShiftsCount = 0;
 
   weeklyRecords.forEach((r) => {
     if (r.checkInAt) {
       daysPresent += 1;
-      totalWeeklyMinutes += r.workingMinutes;
       if (r.lateMinutes > 0) daysLate += 1;
 
-      const shiftEarnings = calculateShiftEarnings(
-        user,
-        r,
-        r.workingMinutes,
-        r.status
-      );
-      totalWeeklyEarnings += shiftEarnings.totalEarned;
-      totalWeeklyBaseEarnings += shiftEarnings.baseEarned;
-      if (shiftEarnings.isOvertimeApproved) {
-        totalWeeklyApprovedOvertime += shiftEarnings.overtimeEarned;
-      } else if (shiftEarnings.overtimeStatus === 'PENDING') {
-        totalWeeklyPendingOvertime += shiftEarnings.overtimePendingAmount || shiftEarnings.overtimeEarned;
+      // Only calculate and add shift earnings to weekly salary AFTER check-out!
+      // When shift is completed (checkOutAt is present), machinesOperated and hoursOperated are verified.
+      if (r.checkOutAt) {
+        completedShiftsCount += 1;
+        totalWeeklyMinutes += r.workingMinutes;
+
+        const shiftEarnings = calculateShiftEarnings(
+          user,
+          r,
+          r.workingMinutes,
+          r.status
+        );
+        totalWeeklyEarnings += shiftEarnings.totalEarned;
+        totalWeeklyBaseEarnings += shiftEarnings.baseEarned;
+        if (shiftEarnings.isOvertimeApproved) {
+          totalWeeklyApprovedOvertime += shiftEarnings.overtimeEarned;
+        } else if (shiftEarnings.overtimeStatus === 'PENDING') {
+          totalWeeklyPendingOvertime += shiftEarnings.overtimePendingAmount || shiftEarnings.overtimeEarned;
+        }
       }
     }
   });
@@ -916,13 +939,15 @@ export async function getWorkerStatus(userId: string) {
 
   const displayDate = activeRecord?.attendanceDate || todayDate;
 
+  // Today's shift earnings: ONLY compute and show once the worker has completed check-out!
+  // If activeRecord is checked-in but not checked-out, shift is in progress and earnings calculate upon check-out.
   let earnings: any = null;
-  if (activeRecord && (activeRecord.checkInAt || activeRecord.overtimeHours || activeRecord.machinesOperated)) {
+  if (activeRecord && activeRecord.checkInAt && activeRecord.checkOutAt) {
     earnings = calculateShiftEarnings(
       user,
       activeRecord,
-      liveDurationMinutes,
-      activeRecord.status || (isCheckedIn ? AttendanceStatuses.PRESENT : 'NOT_MARKED')
+      activeRecord.workingMinutes,
+      activeRecord.status || AttendanceStatuses.PRESENT
     );
   }
 
@@ -984,6 +1009,8 @@ export async function getWorkerStatus(userId: string) {
       totalWeeklyBaseEarnings,
       totalWeeklyApprovedOvertime,
       totalWeeklyPendingOvertime,
+      completedShiftsCount,
+      hasOngoingShift: isCheckedIn && !isCheckedOut,
     },
     geofenceConfig: {
       enabled: activeRules.geofencingEnabled ?? true,
@@ -1042,7 +1069,8 @@ export async function getWorkerAttendanceHistory(
   ]);
 
   return records.map((r) => {
-    const earnings = user && r.checkInAt
+    // Only calculate earnings for completed (checked-out) shifts
+    const earnings = user && r.checkInAt && r.checkOutAt
       ? calculateShiftEarnings(user, r, r.workingMinutes, r.status)
       : null;
 
@@ -1055,7 +1083,7 @@ export async function getWorkerAttendanceHistory(
       checkOutTime: formatKolkataTime(r.checkOutAt),
       checkInAt: r.checkInAt,
       checkOutAt: r.checkOutAt,
-      workingHours: Number((r.workingMinutes / 60).toFixed(2)),
+      workingHours: r.checkOutAt ? Number((r.workingMinutes / 60).toFixed(2)) : 0,
       breakMinutes: r.breakMinutes,
       status: r.status,
       lateMinutes: r.lateMinutes,

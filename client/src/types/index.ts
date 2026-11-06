@@ -181,6 +181,8 @@ export interface WorkerTodayStatus {
     totalWeeklyBaseEarnings?: number;
     totalWeeklyApprovedOvertime?: number;
     totalWeeklyPendingOvertime?: number;
+    completedShiftsCount?: number;
+    hasOngoingShift?: boolean;
   };
   geofenceConfig?: {
     enabled: boolean;

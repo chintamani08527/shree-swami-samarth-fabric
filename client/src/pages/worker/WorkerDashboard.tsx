@@ -247,14 +247,17 @@ export const WorkerDashboard: React.FC = () => {
 
   // Check Out initiator
   const handleInitiateCheckOut = () => {
-    // Pre-fill hours operated with live duration if not filled
+    // Pre-fill hours operated with live duration or standard shift 12h
     if (!hoursOperated && activeTimerSeconds > 0) {
       const liveHrs = (activeTimerSeconds / 3600).toFixed(1);
       setHoursOperated(liveHrs);
+    } else if (!hoursOperated) {
+      setHoursOperated(statusData?.today?.hoursOperated ? String(statusData.today.hoursOperated) : '12');
     }
-    if (hasCustomWageAccess || machinesOperated) {
-      setHasOvertime(true);
+    if (!machinesOperated && statusData?.today?.machinesOperated) {
+      setMachinesOperated(String(statusData.today.machinesOperated));
     }
+    setHasOvertime(Boolean(overtimeMachines || overtimeHours || statusData?.today?.overtimeHours));
     setCheckOutPromptOpen(true);
   };
 
@@ -1168,6 +1171,37 @@ export const WorkerDashboard: React.FC = () => {
                     ) : null}
                   </div>
                 </div>
+
+                {/* Shift in Progress Notice: Informs worker that today's salary adds upon check-out */}
+                {isCheckedIn && !isCheckedOut && (
+                  <div className="mt-3 pt-2.5 border-t border-emerald-200/60 flex items-start gap-2 text-xs text-amber-900 bg-amber-50/90 p-2.5 rounded-xl border border-amber-200/80">
+                    <Clock className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5 animate-pulse" />
+                    <div>
+                      <span className="font-bold">Shift in Progress ⏳</span>: Today's salary will be calculated and added to your weekly total <strong>after you tap Check-Out</strong> based on your operated machines and hours worked.
+                      <span className="block text-[11px] text-amber-800 mt-0.5 font-medium">
+                        (आजचा पगार चेक-आऊट झाल्यावर मशिन्स व कामाच्या तासांनुसार या आठवड्याच्या पगारात जमा होईल.)
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Completed Shift Notice: Confirms today's earnings are credited */}
+                {isCheckedOut && statusData?.today?.earnings && (
+                  <div className="mt-3 pt-2.5 border-t border-emerald-200/60 flex items-start gap-2 text-xs text-emerald-950 bg-emerald-50/90 p-2.5 rounded-xl border border-emerald-200">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold">Today's Shift Credited ✅</span>: +₹{(statusData.today.earnings.totalEarned || 0).toLocaleString('en-IN')}{' '}
+                      {statusData?.worker?.customWageRate ? (
+                        <span className="font-semibold text-emerald-800">
+                          ({statusData.today.machinesOperated ?? 1} Machines × {statusData.today.hoursOperated ?? statusData.today.workingHours} hrs @ ₹{statusData.worker.customWageRate}/mc/hr)
+                        </span>
+                      ) : (
+                        <span className="font-semibold text-emerald-800">(Shift Completed)</span>
+                      )}{' '}
+                      calculated and credited to Weekly Salary above.
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-3 gap-2 text-center">
@@ -1562,11 +1596,15 @@ export const WorkerDashboard: React.FC = () => {
 
                     <div className="flex flex-col items-end gap-1 shrink-0">
                       <StatusBadge status={r.status} size="sm" />
-                      {r.earnings?.totalEarned !== undefined && r.earnings?.totalEarned > 0 && (
+                      {r.checkInAt && !r.checkOutAt ? (
+                        <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 animate-pulse">
+                          In Progress ⏳
+                        </span>
+                      ) : r.earnings?.totalEarned !== undefined && r.earnings?.totalEarned > 0 ? (
                         <span className="text-xs font-black text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 font-mono">
                           ₹{r.earnings.totalEarned.toLocaleString('en-IN')}
                         </span>
-                      )}
+                      ) : null}
                       {r.lateMinutes > 0 && (
                         <span className="text-[10px] text-amber-600 font-semibold">
                           Late {r.lateMinutes}m
@@ -1766,27 +1804,80 @@ export const WorkerDashboard: React.FC = () => {
           </div>
 
           {/* SHIFT WORK SECTION */}
-          {hasCustomWageAccess && (
+          {(hasCustomWageAccess || Boolean(statusData?.worker?.customWageRate) || statusData?.worker?.wageType === 'CUSTOM') ? (
             <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-navy-950 flex items-center gap-1.5">
                   <Cpu className="w-3.5 h-3.5 text-teal-700" />
-                  <span>Standard Shift Work</span>
+                  <span>Standard Shift Work (यंत्रे व कामाचे तास)</span>
                 </span>
                 <span className="text-[10px] text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200 font-bold uppercase">
-                  Shift Duty
+                  Rate: ₹{statusData?.worker?.customWageRate || 29.17}/mc/hr
                 </span>
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Shift Machines Operated
+                    Machines Operated (मशिन्स संख्या) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="e.g. 4 (Number of looms)"
+                    value={machinesOperated}
+                    onChange={(e) => setMachinesOperated(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-teal-500"
+                  />
+                  <span className="text-[10px] text-slate-400">Total looms operated</span>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Shift Hours Worked (कामाचे तास) *
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="1"
+                    placeholder="e.g. 12"
+                    value={hoursOperated}
+                    onChange={(e) => setHoursOperated(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-teal-500"
+                  />
+                  <span className="text-[10px] text-slate-400">Total shift hours worked</span>
+                </div>
+              </div>
+
+              {/* Real-time live calculation preview */}
+              {machinesOperated && hoursOperated && (
+                <div className="p-2.5 bg-teal-50 border border-teal-200 rounded-lg flex items-center justify-between text-xs">
+                  <span className="text-teal-900 font-semibold">Shift Wage Preview:</span>
+                  <strong className="text-teal-950 font-mono font-black text-sm">
+                    {machinesOperated} mc × {hoursOperated} hrs @ ₹{statusData?.worker?.customWageRate || 29.17} = ₹{Math.round(Number(machinesOperated) * Number(hoursOperated) * (statusData?.worker?.customWageRate || 29.17)).toLocaleString('en-IN')}
+                  </strong>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-navy-950 flex items-center gap-1.5">
+                  <Cpu className="w-3.5 h-3.5 text-teal-700" />
+                  <span>Fixed Daily Wage Shift (निश्चित दैनिक पगार)</span>
+                </span>
+                <span className="text-[10px] text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200 font-bold uppercase">
+                  Daily: ₹{statusData?.worker?.dailyWage || user?.dailyWage || 1000}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Machines Operated (मशिन्स संख्या)
                   </label>
                   <input
                     type="number"
                     min="0"
-                    placeholder="e.g. 2"
+                    placeholder="e.g. 2 (Optional)"
                     value={machinesOperated}
                     onChange={(e) => setMachinesOperated(e.target.value)}
                     className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-teal-500"
@@ -1794,13 +1885,13 @@ export const WorkerDashboard: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Shift Hours Worked
+                    Shift Hours Worked (कामाचे तास)
                   </label>
                   <input
                     type="number"
                     step="any"
                     min="0"
-                    placeholder="e.g. 8"
+                    placeholder="e.g. 12"
                     value={hoursOperated}
                     onChange={(e) => setHoursOperated(e.target.value)}
                     className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-teal-500"
