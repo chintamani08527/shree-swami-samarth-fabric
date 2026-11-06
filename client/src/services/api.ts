@@ -1,3 +1,5 @@
+import { AdvanceRecord, AllAdvancesResponse, WorkerAdvancesResponse } from '../types/index.ts';
+
 const isAndroidApp =
   typeof window !== 'undefined' &&
   (window.location.protocol === 'capacitor:' ||
@@ -470,3 +472,53 @@ export const adminsApi = {
       method: 'DELETE',
     }),
 };
+
+// 9. Advance (उचल) API
+export const advanceApi = {
+  // Worker: View personal advances & summary
+  getMyAdvances: () =>
+    request<{ success: boolean; data: WorkerAdvancesResponse }>('/advances/me'),
+
+  // Worker: Request an advance
+  requestAdvance: (amount: number, reason?: string) =>
+    request<{ success: boolean; message: string; data: AdvanceRecord }>('/advances/request', {
+      method: 'POST',
+      body: JSON.stringify({ amount, reason }),
+    }),
+
+  // Admin / Supervisor: Query all advances with stats
+  getAllAdvances: (params: Record<string, any> = {}) => {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== '') searchParams.append(k, String(v));
+    });
+    return request<{ success: boolean; data: AllAdvancesResponse }>(`/advances?${searchParams.toString()}`);
+  },
+
+  // Admin: Give advance to worker
+  createAdvance: (data: {
+    userId: string;
+    amount: number;
+    advanceDate?: string;
+    paymentMode?: string;
+    reason?: string;
+  }) =>
+    request<{ success: boolean; message: string; data: AdvanceRecord }>('/advances', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Admin: Update advance status
+  updateStatus: (id: string, status: string, rejectionReason?: string) =>
+    request<{ success: boolean; message: string; data: AdvanceRecord }>(`/advances/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, rejectionReason }),
+    }),
+
+  // Admin: Delete advance
+  deleteAdvance: (id: string) =>
+    request<{ success: boolean; message: string }>(`/advances/${id}`, {
+      method: 'DELETE',
+    }),
+};
+

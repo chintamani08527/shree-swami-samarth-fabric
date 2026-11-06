@@ -19,6 +19,11 @@ import {
   Sparkles,
   Zap,
   XCircle,
+  IndianRupee,
+  Banknote,
+  PlusCircle,
+  Check,
+  ArrowRight,
 } from 'lucide-react';
 import { Logo } from '../../components/common/Logo.tsx';
 import { LiveClock } from '../../components/common/LiveClock.tsx';
@@ -27,8 +32,8 @@ import { Modal } from '../../components/common/Modal.tsx';
 import { WorkerBottomNav } from '../../components/layout/WorkerBottomNav.tsx';
 import { useAuth } from '../../context/AuthContext.tsx';
 import { useToast } from '../../context/ToastContext.tsx';
-import { attendanceApi } from '../../services/api.ts';
-import { WorkerTodayStatus, ShiftEarnings } from '../../types/index.ts';
+import { attendanceApi, advanceApi } from '../../services/api.ts';
+import { WorkerTodayStatus, ShiftEarnings, AdvanceRecord } from '../../types/index.ts';
 import { FactoryLocationMap } from '../../components/common/FactoryLocationMap.tsx';
 import { getCurrentGPSPosition, GPSPosition, requestDeviceLocationPermission } from '../../utils/geo.ts';
 
@@ -36,12 +41,22 @@ export const WorkerDashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const { showToast } = useToast();
 
-  const [currentTab, setCurrentTab] = useState<'home' | 'overtime' | 'history' | 'profile'>('home');
+  const [currentTab, setCurrentTab] = useState<'home' | 'overtime' | 'advance' | 'history' | 'profile'>('home');
   const [statusData, setStatusData] = useState<WorkerTodayStatus | null>(null);
   const [historyRecords, setHistoryRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [activeTimerSeconds, setActiveTimerSeconds] = useState<number>(0);
+
+  // Worker Advance (उचल) dedicated state
+  const [workerAdvances, setWorkerAdvances] = useState<AdvanceRecord[]>([]);
+  const [advanceTotalActive, setAdvanceTotalActive] = useState<number>(0);
+  const [advanceTotalDeducted, setAdvanceTotalDeducted] = useState<number>(0);
+  const [advanceTotalRepaid, setAdvanceTotalRepaid] = useState<number>(0);
+  const [requestAdvanceModalOpen, setRequestAdvanceModalOpen] = useState(false);
+  const [requestAmount, setRequestAmount] = useState<string>('');
+  const [requestReason, setRequestReason] = useState<string>('');
+  const [submittingAdvanceRequest, setSubmittingAdvanceRequest] = useState(false);
 
   // Location & Geofencing state
   const [currentGPS, setCurrentGPS] = useState<GPSPosition | null>(null);
@@ -82,39 +97,71 @@ export const WorkerDashboard: React.FC = () => {
     (user?.hasCustomWageAccess || user?.wageType === 'CUSTOM' || statusData?.worker?.wageType === 'CUSTOM')
   );
 
-  // Load worker today status and attendance history
+  // Load worker today status, attendance history, and advances
   const loadData = async (forceSpinner: boolean | any = false) => {
     try {
       if (forceSpinner === true || !statusData) {
         setLoading(true);
       }
-      const [statusRes, historyRes] = await Promise.all([
+      const [statusRes, historyRes, advanceRes] = await Promise.allSettled([
         attendanceApi.getMyStatus(),
         attendanceApi.getMyHistory(),
+        advanceApi.getMyAdvances(),
       ]);
 
-      if (statusRes.success) {
-        setStatusData(statusRes.data);
-        if (statusRes.data.today.machinesOperated != null) {
-          setMachinesOperated(String(statusRes.data.today.machinesOperated));
+      if (statusRes.status === 'fulfilled' && statusRes.value.success) {
+        setStatusData(statusRes.value.data);
+        if (statusRes.value.data.today.machinesOperated != null) {
+          setMachinesOperated(String(statusRes.value.data.today.machinesOperated));
         }
-        if (statusRes.data.today.hoursOperated != null) {
-          setHoursOperated(String(statusRes.data.today.hoursOperated));
+        if (statusRes.value.data.today.hoursOperated != null) {
+          setHoursOperated(String(statusRes.value.data.today.hoursOperated));
         }
-        if (statusRes.data.today.overtimeMachines != null) {
-          setOvertimeMachines(String(statusRes.data.today.overtimeMachines));
+        if (statusRes.value.data.today.overtimeMachines != null) {
+          setOvertimeMachines(String(statusRes.value.data.today.overtimeMachines));
         }
-        if (statusRes.data.today.overtimeHours != null) {
-          setOvertimeHours(String(statusRes.data.today.overtimeHours));
+        if (statusRes.value.data.today.overtimeHours != null) {
+          setOvertimeHours(String(statusRes.value.data.today.overtimeHours));
         }
       }
-      if (historyRes.success) {
-        setHistoryRecords(historyRes.data);
+      if (historyRes.status === 'fulfilled' && historyRes.value.success) {
+        setHistoryRecords(historyRes.value.data);
+      }
+      if (advanceRes.status === 'fulfilled' && advanceRes.value.success && advanceRes.value.data) {
+        setWorkerAdvances(advanceRes.value.data.advances || []);
+        setAdvanceTotalActive(advanceRes.value.data.totalActive || 0);
+        setAdvanceTotalDeducted(advanceRes.value.data.totalDeducted || 0);
+        setAdvanceTotalRepaid(advanceRes.value.data.totalRepaid || 0);
       }
     } catch (err: any) {
       showToast(err.message || 'Failed to refresh attendance data', 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Submit Advance Request to Admin
+  const handleSubmitAdvanceRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = parseFloat(requestAmount);
+    if (isNaN(amt) || amt <= 0) {
+      showToast('कृपया योग्य उचल रक्कम टाका / Please enter a valid amount', 'error');
+      return;
+    }
+    try {
+      setSubmittingAdvanceRequest(true);
+      const res = await advanceApi.requestAdvance(amt, requestReason.trim() || undefined);
+      if (res.success) {
+        showToast(res.message || 'उचल मागणी पाठवली गेली! ॲडमिन मंजुरीनंतर सक्रिय होईल.', 'success');
+        setRequestAdvanceModalOpen(false);
+        setRequestAmount('');
+        setRequestReason('');
+        await loadData();
+      }
+    } catch (err: any) {
+      showToast(err.message || 'उचल मागणी पाठवण्यात त्रुटी / Failed to submit request', 'error');
+    } finally {
+      setSubmittingAdvanceRequest(false);
     }
   };
 
@@ -596,10 +643,10 @@ export const WorkerDashboard: React.FC = () => {
         </div>
 
         {/* Navigation Tabs Bar */}
-        <div className="bg-white rounded-2xl p-1.5 shadow-sm border border-slate-200/90 grid grid-cols-4 gap-1 text-xs font-bold">
+        <div className="bg-white rounded-2xl p-1.5 shadow-sm border border-slate-200/90 grid grid-cols-5 gap-1 text-[11px] font-bold">
           <button
             onClick={() => setCurrentTab('home')}
-            className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1.5 transition-all ${
+            className={`py-2 px-0.5 rounded-xl flex items-center justify-center gap-1 transition-all ${
               currentTab === 'home'
                 ? 'bg-navy-950 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -610,29 +657,40 @@ export const WorkerDashboard: React.FC = () => {
           </button>
           <button
             onClick={() => setCurrentTab('overtime')}
-            className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1.5 transition-all ${
+            className={`py-2 px-0.5 rounded-xl flex items-center justify-center gap-1 transition-all ${
               currentTab === 'overtime'
                 ? 'bg-amber-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
           >
             <Timer className="w-3.5 h-3.5" />
-            <span>Overtime</span>
+            <span>OT</span>
           </button>
           <button
-            onClick={() => setCurrentTab('history')}
-            className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1.5 transition-all ${
-              currentTab === 'history'
+            onClick={() => setCurrentTab('advance')}
+            className={`py-2 px-0.5 rounded-xl flex items-center justify-center gap-1 transition-all ${
+              currentTab === 'advance'
                 ? 'bg-teal-700 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
           >
+            <IndianRupee className="w-3.5 h-3.5" />
+            <span>उचल</span>
+          </button>
+          <button
+            onClick={() => setCurrentTab('history')}
+            className={`py-2 px-0.5 rounded-xl flex items-center justify-center gap-1 transition-all ${
+              currentTab === 'history'
+                ? 'bg-navy-950 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
             <CalendarCheck className="w-3.5 h-3.5" />
-            <span>History</span>
+            <span>Logs</span>
           </button>
           <button
             onClick={() => setCurrentTab('profile')}
-            className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1.5 transition-all ${
+            className={`py-2 px-0.5 rounded-xl flex items-center justify-center gap-1 transition-all ${
               currentTab === 'profile'
                 ? 'bg-navy-950 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -1018,6 +1076,56 @@ export const WorkerDashboard: React.FC = () => {
                     </div>
                   </div>
                 )}
+
+                {/* Advance Taken (उचल) & Net Payable Wage Breakdown */}
+                {((statusData?.advancesSummary?.totalActiveAdvance ?? advanceTotalActive) > 0) ? (
+                  <div className="mt-3 pt-2.5 border-t border-emerald-200/80 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-600 font-semibold flex items-center gap-1.5">
+                        <IndianRupee className="w-3.5 h-3.5 text-rose-500" />
+                        <span>Active Advance Taken • घेतलेली उचल:</span>
+                      </span>
+                      <span className="text-rose-600 font-extrabold text-sm font-mono">
+                        - ₹{((statusData?.advancesSummary?.totalActiveAdvance ?? advanceTotalActive)).toLocaleString('en-IN')}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 bg-emerald-100/90 rounded-xl border border-emerald-300 flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] font-extrabold text-emerald-900 uppercase tracking-wider block">
+                          Net Payable Salary • उर्वरित पगार
+                        </span>
+                        <span className="text-[10px] text-emerald-700 font-medium">
+                          (एकूण पगार - उचल वजावट)
+                        </span>
+                      </div>
+                      <div className="text-xl font-black text-emerald-950 font-mono">
+                        ₹{(statusData?.advancesSummary?.netPayableWeekly ?? Math.max(0, (statusData?.weeklySummary?.totalWeeklyEarnings ?? 0) - (statusData?.advancesSummary?.totalActiveAdvance ?? advanceTotalActive))).toLocaleString('en-IN')}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setCurrentTab('advance')}
+                      className="w-full py-1.5 px-3 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 text-[11px] font-bold border border-teal-200 flex items-center justify-center gap-1 transition-colors"
+                    >
+                      <span>उचल तपशील व नवीन मागणी पहा (View Advance Details) →</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-2.5 pt-2 border-t border-emerald-200/60 flex items-center justify-between text-xs">
+                    <span className="text-slate-500 font-medium text-[11px]">
+                      उचल शिल्लक: ₹0 (No active advance)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentTab('advance')}
+                      className="text-teal-700 hover:text-teal-900 font-bold text-[11px] flex items-center gap-0.5"
+                    >
+                      <span>उचल विभाग (Advance) →</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-3 gap-2 text-center">
@@ -1315,6 +1423,225 @@ export const WorkerDashboard: React.FC = () => {
               <p>• Overtime entries are verified against shift schedules and loom operation logs.</p>
               <p>• You can update your overtime work details at any time before final checkout.</p>
               <p>• Overtime earnings will be settled in your weekly / monthly payroll calculation.</p>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: DEDICATED ADVANCE SECTION (कामगार उचल विभाग) */}
+        {currentTab === 'advance' && (
+          <div className="space-y-4">
+            {/* Advance Header Banner */}
+            <div className="bg-gradient-to-r from-teal-800 via-teal-700 to-navy-900 text-white rounded-2xl p-5 shadow-lg relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-teal-200 uppercase tracking-wider">
+                  <Banknote className="w-4 h-4" />
+                  <span>Factory Advance &amp; Loan Section</span>
+                </div>
+                <span className="text-[11px] font-bold bg-white/20 backdrop-blur-sm px-2.5 py-0.5 rounded-full border border-white/30">
+                  उचल विभाग
+                </span>
+              </div>
+
+              <h2 className="text-xl sm:text-2xl font-black tracking-tight">
+                Advance Balance &amp; Requests • कामगार उचल
+              </h2>
+              <p className="text-xs text-teal-100 mt-1">
+                आपण घेतलेली उचल रक्कम तपासा आणि आवश्यक असल्यास नवीन उचल मागणी पाठवा.
+              </p>
+
+              {/* Status Pills */}
+              <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-white/20 text-xs">
+                <span className="bg-black/25 px-2.5 py-1 rounded-lg font-mono">
+                  Worker ID: {user?.workerId}
+                </span>
+                <span className="bg-black/25 px-2.5 py-1 rounded-lg">
+                  {user?.name}
+                </span>
+                <span className="bg-white/25 px-2.5 py-1 rounded-lg font-bold">
+                  🏭 {statusData?.worker?.unit || user?.unit || 'Unit 1'}
+                </span>
+              </div>
+            </div>
+
+            {/* Quick KPI Balance Cards */}
+            <div className="grid grid-cols-2 gap-3">
+              {/* 1. Active Outstanding Advance */}
+              <div className="bg-white p-4 rounded-2xl border-2 border-rose-200 shadow-sm space-y-1">
+                <div className="flex items-center justify-between text-rose-800">
+                  <span className="text-[11px] font-bold uppercase tracking-wider">
+                    Active Advance • शिल्लक उचल
+                  </span>
+                  <IndianRupee className="w-4 h-4 text-rose-600" />
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-rose-950 font-mono">
+                  ₹{(statusData?.advancesSummary?.totalActiveAdvance ?? advanceTotalActive).toLocaleString('en-IN')}
+                </div>
+                <div className="text-[10px] text-rose-700 font-medium">
+                  पगारातून वजा केली जाईल (Will be deducted)
+                </div>
+              </div>
+
+              {/* 2. Estimated Net Payable Wages */}
+              <div className="bg-white p-4 rounded-2xl border-2 border-emerald-200 shadow-sm space-y-1">
+                <div className="flex items-center justify-between text-emerald-800">
+                  <span className="text-[11px] font-bold uppercase tracking-wider">
+                    Net Salary • उर्वरित पगार
+                  </span>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-emerald-950 font-mono">
+                  ₹{(statusData?.advancesSummary?.netPayableWeekly ?? Math.max(0, (statusData?.weeklySummary?.totalWeeklyEarnings ?? 0) - (statusData?.advancesSummary?.totalActiveAdvance ?? advanceTotalActive))).toLocaleString('en-IN')}
+                </div>
+                <div className="text-[10px] text-emerald-700 font-medium">
+                  या आठवड्याचा एकूण पगार - उचल
+                </div>
+              </div>
+            </div>
+
+            {/* Primary Action: Request Advance Button */}
+            <button
+              type="button"
+              onClick={() => setRequestAdvanceModalOpen(true)}
+              className="w-full py-3.5 px-4 rounded-2xl bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-sm sm:text-base shadow-md shadow-teal-700/25 flex items-center justify-center gap-2 transition-all tap-active"
+            >
+              <PlusCircle className="w-5 h-5" />
+              <span>Request New Advance • नवीन उचल मागणी करा</span>
+            </button>
+
+            {/* Pending Requests Alert Notice (If worker has requested advance) */}
+            {workerAdvances.some((a) => a.status === 'REQUESTED') && (
+              <div className="p-4 bg-amber-50 rounded-2xl border-2 border-amber-300 shadow-2xs space-y-2">
+                <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
+                  <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
+                  <span>उचल मागणी प्रलंबित आहे (Pending Admin Approval)</span>
+                </div>
+                {workerAdvances
+                  .filter((a) => a.status === 'REQUESTED')
+                  .map((req) => (
+                    <div key={req.id} className="p-2.5 bg-white rounded-xl border border-amber-200 text-xs text-amber-950 flex items-center justify-between">
+                      <div>
+                        <span className="font-extrabold text-sm text-navy-950 block">
+                          ₹{req.amount.toLocaleString('en-IN')}
+                        </span>
+                        <span className="text-[11px] text-slate-600">
+                          {req.reason || 'कोणतेही कारण नमूद नाही'}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold bg-amber-100 text-amber-900 px-2.5 py-1 rounded-full border border-amber-300 font-mono">
+                        {new Date(req.advanceDate).toLocaleDateString('en-IN')}
+                      </span>
+                    </div>
+                  ))}
+                <p className="text-[11px] text-amber-800">
+                  व्यवस्थापकांनी (Admin) ही मागणी मंजूर केल्यावर रक्कम आपल्या शिल्लक उचलीत जमा होईल.
+                </p>
+              </div>
+            )}
+
+            {/* Advance History List */}
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-navy-950">
+                    Advance History • उचल नोंदींचा इतिहास
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    आपण घेतलेली सर्व उचल व तिची सद्यस्थिती
+                  </p>
+                </div>
+                <button
+                  onClick={loadData}
+                  disabled={loading}
+                  className="p-1.5 rounded-lg text-slate-500 hover:text-navy-950 border border-slate-200"
+                  title="Refresh"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
+              {workerAdvances.length === 0 ? (
+                <div className="py-8 text-center text-slate-400 space-y-1">
+                  <Banknote className="w-8 h-8 text-slate-300 mx-auto" />
+                  <p className="text-xs font-semibold text-slate-600">अद्याप कोणतीही उचल घेतलेली नाही</p>
+                  <p className="text-[11px] text-slate-400">आपल्या खात्यावर कोणतीही उचल शिल्लक नाही.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {workerAdvances.map((adv) => (
+                    <div key={adv.id} className="py-3 flex items-start justify-between gap-3">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base font-black text-navy-950 font-mono">
+                            ₹{adv.amount.toLocaleString('en-IN')}
+                          </span>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
+                            {adv.paymentMode === 'CASH'
+                              ? '💵 Cash'
+                              : adv.paymentMode === 'UPI'
+                              ? '📱 UPI'
+                              : '🏦 Bank'}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-700 font-medium">
+                          {adv.reason || 'कामगार उचल'}
+                        </div>
+                        {adv.rejectionReason && (
+                          <div className="text-[11px] text-rose-600 font-medium">
+                            कारण: {adv.rejectionReason}
+                          </div>
+                        )}
+                        <div className="text-[10px] text-slate-400 font-mono">
+                          तारीख: {new Date(adv.advanceDate).toLocaleDateString('en-IN', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        {adv.status === 'ACTIVE' ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-teal-600 animate-pulse" />
+                            शिल्लक उचल
+                          </span>
+                        ) : adv.status === 'DEDUCTED' ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-300">
+                            <Check className="w-3 h-3 text-slate-600" />
+                            पगारातून वजा
+                          </span>
+                        ) : adv.status === 'REPAID' ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
+                            <CheckCircle2 className="w-3 h-3 text-blue-600" />
+                            रोख परतफेड
+                          </span>
+                        ) : adv.status === 'REQUESTED' ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-300 animate-pulse">
+                            <Clock className="w-3 h-3 text-amber-600" />
+                            मागणी प्रलंबित
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-200">
+                            <XCircle className="w-3 h-3 text-rose-600" />
+                            नाकारले
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Advance Guidelines Card */}
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 text-xs text-slate-600 space-y-2">
+              <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-teal-600" />
+                <span>उचल नियम व माहिती (Advance Rules):</span>
+              </div>
+              <p>• घेतलेली उचल रक्कम आठवड्याच्या अथवा महिन्याच्या पगारातून थेट वजा केली जाते.</p>
+              <p>• नवीन उचल मागणी केल्यास व्यवस्थापकांच्या मंजुरीनंतरच रक्कम दिली जाईल.</p>
+              <p>• कोणतीही अडचण असल्यास फॅक्टरी व्यवस्थापक अथवा सुपरवायझरशी संपर्क साधा.</p>
             </div>
           </div>
         )}
@@ -1914,6 +2241,103 @@ export const WorkerDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Worker Request Advance Modal */}
+      <Modal
+        isOpen={requestAdvanceModalOpen}
+        onClose={() => !submittingAdvanceRequest && setRequestAdvanceModalOpen(false)}
+        title="Request Advance • उचल मागणी पाठवा"
+      >
+        <form onSubmit={handleSubmitAdvanceRequest} className="space-y-4">
+          <p className="text-xs text-slate-600">
+            आपणास आवश्यक असणारी उचल रक्कम व कारण प्रविष्ट करा. ही मागणी थेट फॅक्टरी व्यवस्थापकांकडे (Admin) मंजुरीसाठी पाठवली जाईल.
+          </p>
+
+          {/* Amount Input */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
+              Advance Amount • उचल हवी असलेली रक्कम (₹) *
+            </label>
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-base">
+                ₹
+              </span>
+              <input
+                type="number"
+                min="100"
+                step="50"
+                value={requestAmount}
+                onChange={(e) => setRequestAmount(e.target.value)}
+                placeholder="उदा. 2000"
+                required
+                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 text-lg font-black text-navy-950 focus:outline-none focus:ring-2 focus:ring-teal-600/40 font-mono"
+              />
+            </div>
+
+            {/* Quick Amount Chips */}
+            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+              {[500, 1000, 2000, 3000, 5000].map((quick) => (
+                <button
+                  type="button"
+                  key={quick}
+                  onClick={() => setRequestAmount(String(quick))}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-700 border border-slate-200 transition-colors"
+                >
+                  ₹{quick}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Reason Input */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
+              Reason / Purpose • उचल घेण्याचे कारण (पर्यायी)
+            </label>
+            <input
+              type="text"
+              value={requestReason}
+              onChange={(e) => setRequestReason(e.target.value)}
+              placeholder="उदा. वैद्यकीय खर्च, कौटुंबिक अडचण, सण..."
+              className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600/40"
+            />
+          </div>
+
+          <div className="p-3 bg-teal-50 rounded-xl border border-teal-200 text-xs text-teal-900 space-y-1">
+            <div className="font-bold">नोंद:</div>
+            <div>मंजूर झालेली उचल रक्कम आपल्या पुढील आठवड्याच्या पगारातून वजा केली जाईल.</div>
+          </div>
+
+          {/* Actions */}
+          <div className="pt-2 border-t border-slate-200 flex items-center justify-end gap-2.5">
+            <button
+              type="button"
+              onClick={() => setRequestAdvanceModalOpen(false)}
+              disabled={submittingAdvanceRequest}
+              className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold text-xs"
+            >
+              रद्द करा / Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submittingAdvanceRequest}
+              className="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-xs shadow-md shadow-teal-700/25 flex items-center gap-2 tap-active disabled:opacity-50"
+            >
+              {submittingAdvanceRequest ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>मागणी पाठवत आहे...</span>
+                </>
+              ) : (
+                <>
+                  <PlusCircle className="w-4 h-4" />
+                  <span>Send Request • उचल मागणी पाठवा</span>
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Worker Mobile Bottom Navigation */}
       <WorkerBottomNav currentTab={currentTab} onSelectTab={(tab: any) => setCurrentTab(tab)} />

@@ -30,6 +30,7 @@ model User {
   attendanceRecords AttendanceRecord[]
   workerShifts      WorkerShift[]
   auditLogs         AuditLog[]
+  advances          Advance[]
 
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -160,4 +161,29 @@ model CompanySettings {
   defaultWorkingHours  Float    @default(8.0)
   attendanceRules      String   // JSON string of rules
   updatedAt            DateTime @updatedAt
+}
+
+model Advance {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workerId        String
+  amount          Float
+  advanceDate     String    // YYYY-MM-DD
+  paymentMode     String    @default("CASH") // CASH, UPI, BANK_TRANSFER
+  status          String    @default("ACTIVE") // ACTIVE, DEDUCTED, REPAID, REQUESTED, REJECTED
+  reason          String?
+  approvedBy      String?
+  approvedAt      DateTime?
+  deductedAt      DateTime?
+  rejectionReason String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([workerId])
+  @@index([status])
+  @@index([advanceDate])
+  @@index([status, advanceDate])
 }

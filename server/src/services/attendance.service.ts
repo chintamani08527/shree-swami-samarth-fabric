@@ -777,8 +777,8 @@ export async function getWorkerStatus(userId: string) {
   const yesterdayDate = getKolkataDateString(yesterday);
   const weekInfo = getWeekDateRange(todayDate);
 
-  // Parallelize user, today record, yesterday record, and weekly records lookups
-  const [user, todayRecord, yesterdayRecord, weeklyRecords, companySettings] = await Promise.all([
+  // Parallelize user, today record, yesterday record, weekly records, and advances lookups
+  const [user, todayRecord, yesterdayRecord, weeklyRecords, companySettings, userAdvances] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -816,6 +816,13 @@ export async function getWorkerStatus(userId: string) {
     }),
     prisma.companySettings.findUnique({
       where: { id: 'default-settings' },
+    }),
+    prisma.advance.findMany({
+      where: {
+        userId,
+        status: { in: ['ACTIVE', 'REQUESTED'] },
+      },
+      orderBy: { advanceDate: 'desc' },
     }),
   ]);
 
@@ -951,6 +958,11 @@ export async function getWorkerStatus(userId: string) {
     );
   }
 
+  // Advance (उचल) summary calculations
+  const activeAdvances = (userAdvances || []).filter((a: any) => a.status === 'ACTIVE');
+  const totalActiveAdvance = activeAdvances.reduce((sum: number, a: any) => sum + a.amount, 0);
+  const pendingAdvancesCount = (userAdvances || []).filter((a: any) => a.status === 'REQUESTED').length;
+
   return {
     today: {
       date: displayDate,
@@ -1011,6 +1023,19 @@ export async function getWorkerStatus(userId: string) {
       totalWeeklyPendingOvertime,
       completedShiftsCount,
       hasOngoingShift: isCheckedIn && !isCheckedOut,
+    },
+    advancesSummary: {
+      totalActiveAdvance,
+      netPayableWeekly: Math.max(0, totalWeeklyEarnings - totalActiveAdvance),
+      activeCount: activeAdvances.length,
+      hasPendingRequest: pendingAdvancesCount > 0,
+      activeAdvances: activeAdvances.map((a: any) => ({
+        id: a.id,
+        amount: a.amount,
+        advanceDate: a.advanceDate,
+        paymentMode: a.paymentMode,
+        reason: a.reason,
+      })),
     },
     geofenceConfig: {
       enabled: activeRules.geofencingEnabled ?? true,

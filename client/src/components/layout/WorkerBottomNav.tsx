@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, CalendarCheck, User as UserIcon, Timer } from 'lucide-react';
+import { Clock, CalendarCheck, User as UserIcon, Timer, IndianRupee } from 'lucide-react';
 
 interface WorkerBottomNavProps {
   currentTab: string;
@@ -10,6 +10,7 @@ export const WorkerBottomNav: React.FC<WorkerBottomNavProps> = ({ currentTab, on
   const tabs = [
     { id: 'home', label: 'Shift', icon: Clock },
     { id: 'overtime', label: 'Overtime', icon: Timer },
+    { id: 'advance', label: 'Advance', icon: IndianRupee },
     { id: 'history', label: 'Attendance', icon: CalendarCheck },
     { id: 'profile', label: 'Profile', icon: UserIcon },
   ];

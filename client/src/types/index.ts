@@ -184,6 +184,19 @@ export interface WorkerTodayStatus {
     completedShiftsCount?: number;
     hasOngoingShift?: boolean;
   };
+  advancesSummary?: {
+    totalActiveAdvance: number;
+    netPayableWeekly: number;
+    activeCount: number;
+    hasPendingRequest: boolean;
+    activeAdvances?: {
+      id: string;
+      amount: number;
+      advanceDate: string;
+      paymentMode: string;
+      reason?: string | null;
+    }[];
+  };
   geofenceConfig?: {
     enabled: boolean;
     radiusMeters: number;
@@ -342,4 +355,58 @@ export interface OvertimeRequestsResponse {
     totalRejectedCount: number;
     totalCount: number;
   };
+}
+
+export interface AdvanceRecord {
+  id: string;
+  userId: string;
+  workerId: string;
+  amount: number;
+  advanceDate: string;
+  paymentMode: 'CASH' | 'UPI' | 'BANK_TRANSFER' | string;
+  status: 'ACTIVE' | 'DEDUCTED' | 'REPAID' | 'REQUESTED' | 'REJECTED' | string;
+  reason?: string | null;
+  approvedBy?: string | null;
+  approvedAt?: string | null;
+  deductedAt?: string | null;
+  rejectionReason?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user?: {
+    id: string;
+    workerId: string;
+    name: string;
+    phone?: string | null;
+    unit?: string;
+    department?: { name: string } | null;
+  };
+}
+
+export interface AdvanceStats {
+  totalActive: number;
+  totalDeducted: number;
+  totalRepaid: number;
+  totalDisbursed: number;
+  countActive?: number;
+  countPendingRequests: number;
+  totalRecords: number;
+}
+
+export interface AllAdvancesResponse {
+  stats: AdvanceStats;
+  advances: AdvanceRecord[];
+}
+
+export interface WorkerAdvancesResponse {
+  worker: {
+    id: string;
+    workerId: string;
+    name: string;
+    unit: string;
+  };
+  totalActive: number;
+  totalDeducted: number;
+  totalRepaid: number;
+  totalRequested: number;
+  advances: AdvanceRecord[];
 }

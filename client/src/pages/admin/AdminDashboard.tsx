@@ -18,6 +18,7 @@ import {
   Phone,
   ChevronDown,
   CheckCircle2,
+  IndianRupee,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -31,7 +32,7 @@ import {
   Bar,
   Legend,
 } from 'recharts';
-import { reportsApi, overtimeApi } from '../../services/api.ts';
+import { reportsApi, overtimeApi, advanceApi } from '../../services/api.ts';
 import { DashboardKPIs, DashboardWorkerItem } from '../../types/index.ts';
 import { useToast } from '../../context/ToastContext.tsx';
 
@@ -46,6 +47,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
   const [data, setData] = useState<DashboardKPIs | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingOvertimeCount, setPendingOvertimeCount] = useState(0);
+  const [pendingAdvanceCount, setPendingAdvanceCount] = useState(0);
 
   // Active Worker List Filter state (Default null or 'present')
   const [activeListType, setActiveListType] = useState<WorkerListType | null>(null);
@@ -59,15 +61,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
       if (forceSpinner === true || !data) {
         setLoading(true);
       }
-      const [res, otRes] = await Promise.allSettled([
+      const [res, otRes, advRes] = await Promise.allSettled([
         reportsApi.getDashboard(),
         overtimeApi.list({ status: 'PENDING' }),
+        advanceApi.getAllAdvances({ status: 'REQUESTED' }),
       ]);
       if (res.status === 'fulfilled' && res.value.success) {
         setData(res.value.data);
       }
       if (otRes.status === 'fulfilled' && otRes.value.success && otRes.value.data) {
         setPendingOvertimeCount(otRes.value.data.summary?.totalPendingCount || 0);
+      }
+      if (advRes.status === 'fulfilled' && advRes.value.success && advRes.value.data) {
+        setPendingAdvanceCount(advRes.value.data.stats?.countPendingRequests || advRes.value.data.advances?.length || 0);
       }
     } catch (err: any) {
       showToast(err.message || 'Failed to load dashboard metrics', 'error');
@@ -226,6 +232,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
             className="flex items-center justify-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all active:scale-95 shrink-0"
           >
             <span>Review & Approve ({pendingOvertimeCount})</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Advance Requests Pending Approval Alert Banner */}
+      {pendingAdvanceCount > 0 && (
+        <div className="bg-gradient-to-r from-teal-500/15 via-teal-500/5 to-white border-2 border-teal-400/80 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="p-2.5 bg-teal-700 text-white rounded-xl shadow-xs shrink-0 font-bold text-base flex items-center justify-center">
+              ₹
+            </div>
+            <div>
+              <div className="text-sm sm:text-base font-bold text-teal-950 flex items-center gap-2">
+                <span>{pendingAdvanceCount} Worker Advance Request{pendingAdvanceCount > 1 ? 's' : ''} • कामगार उचल मागण्या</span>
+                <span className="px-2 py-0.5 text-[10px] font-black uppercase bg-teal-200 text-teal-900 rounded-full animate-pulse">
+                  उचल मागणी
+                </span>
+              </div>
+              <p className="text-xs text-teal-800/90 mt-0.5">
+                कामगारांनी ॲपवरून उचल मागणी पाठवली आहे. मंजुरीसाठी तपासा.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigateTab('advances')}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all active:scale-95 shrink-0"
+          >
+            <span>Review Advances • उचल तपासा ({pendingAdvanceCount})</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
