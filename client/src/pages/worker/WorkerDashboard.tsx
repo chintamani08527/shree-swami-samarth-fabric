@@ -1122,7 +1122,7 @@ export const WorkerDashboard: React.FC = () => {
               {statusData?.worker?.customWageRate && statusData.today.overtimeMachines && statusData.today.overtimeHours ? (
                 <div className="p-2.5 bg-slate-900 text-white rounded-xl flex items-center justify-between text-xs">
                   <span className="text-slate-300">
-                    Estimated OT Wage (@ ₹{statusData.worker.customWageRate}/mc/hr):
+                    Estimated OT Wage:
                   </span>
                   <strong className="text-amber-400 font-mono text-sm font-black">
                     ₹{Math.round(statusData.today.overtimeMachines * statusData.today.overtimeHours * statusData.worker.customWageRate).toLocaleString('en-IN')}
@@ -1193,7 +1193,7 @@ export const WorkerDashboard: React.FC = () => {
                       <span className="font-bold">Today's Shift Credited ✅</span>: +₹{(statusData.today.earnings.totalEarned || 0).toLocaleString('en-IN')}{' '}
                       {statusData?.worker?.customWageRate ? (
                         <span className="font-semibold text-emerald-800">
-                          ({statusData.today.machinesOperated ?? 1} Machines × {statusData.today.hoursOperated ?? statusData.today.workingHours} hrs @ ₹{statusData.worker.customWageRate}/mc/hr)
+                          ({statusData.today.machinesOperated ?? 1} Machines • {statusData.today.hoursOperated ?? statusData.today.workingHours} hrs)
                         </span>
                       ) : (
                         <span className="font-semibold text-emerald-800">(Shift Completed)</span>
@@ -1277,11 +1277,9 @@ export const WorkerDashboard: React.FC = () => {
                 <span className="bg-black/25 px-2.5 py-1 rounded-lg">
                   {statusData?.today.shiftType === 'NIGHT' ? '🌙 Night Shift' : '☀️ Day Shift'}
                 </span>
-                {statusData?.worker?.customWageRate ? (
-                  <span className="bg-white/25 px-2.5 py-1 rounded-lg font-mono font-bold">
-                    Rate: ₹{statusData.worker.customWageRate}/mc/hr
-                  </span>
-                ) : null}
+                <span className="bg-white/25 px-2.5 py-1 rounded-lg font-bold">
+                  Shift Overtime
+                </span>
               </div>
             </div>
 
@@ -1339,13 +1337,7 @@ export const WorkerDashboard: React.FC = () => {
               {/* Calculated Overtime Payout Card */}
               {statusData?.worker?.customWageRate && (overtimeMachines || statusData?.today.overtimeMachines) && (overtimeHours || statusData?.today.overtimeHours) ? (
                 <div className="p-3.5 bg-slate-900 text-white rounded-xl space-y-1">
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span>Overtime Formula:</span>
-                    <span className="font-mono text-amber-300">
-                      {(overtimeMachines || statusData.today.overtimeMachines)} mc × {(overtimeHours || statusData.today.overtimeHours)} hrs × ₹{statusData.worker.customWageRate}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-800">
+                  <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-200">Total Projected OT Earnings:</span>
                     <strong className="text-base sm:text-lg font-black text-amber-400 font-mono">
                       ₹{Math.round(
@@ -1472,7 +1464,7 @@ export const WorkerDashboard: React.FC = () => {
                     <div>
                       <span className="font-bold block">Live OT Wage Preview:</span>
                       <span className="text-[11px] text-amber-800">
-                        {overtimeMachines} mc × {overtimeHours} hrs @ ₹{statusData.worker.customWageRate}
+                        {overtimeMachines} Looms • {overtimeHours} hrs
                       </span>
                     </div>
                     <strong className="text-base font-black font-mono text-amber-900">
@@ -1647,10 +1639,10 @@ export const WorkerDashboard: React.FC = () => {
                 <span className="font-bold text-navy-950">
                   {hasCustomWageAccess ? (
                     <span className="text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded text-xs font-semibold">
-                      Custom (₹{statusData?.worker?.customWageRate ?? user?.customWageRate ?? 0}/mc/hr)
+                      Custom Machine Wage
                     </span>
                   ) : (
-                    <span>Fixed Daily Wage {user?.dailyWage ? `(₹${user.dailyWage}/day)` : ''}</span>
+                    <span>Fixed Daily Wage</span>
                   )}
                 </span>
               </div>
@@ -1812,7 +1804,7 @@ export const WorkerDashboard: React.FC = () => {
                   <span>Standard Shift Work (यंत्रे व कामाचे तास)</span>
                 </span>
                 <span className="text-[10px] text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200 font-bold uppercase">
-                  Rate: ₹{statusData?.worker?.customWageRate || 29.17}/mc/hr
+                  Shift Duty
                 </span>
               </div>
 
@@ -1853,7 +1845,7 @@ export const WorkerDashboard: React.FC = () => {
                 <div className="p-2.5 bg-teal-50 border border-teal-200 rounded-lg flex items-center justify-between text-xs">
                   <span className="text-teal-900 font-semibold">Shift Wage Preview:</span>
                   <strong className="text-teal-950 font-mono font-black text-sm">
-                    {machinesOperated} mc × {hoursOperated} hrs @ ₹{statusData?.worker?.customWageRate || 29.17} = ₹{Math.round(Number(machinesOperated) * Number(hoursOperated) * (statusData?.worker?.customWageRate || 29.17)).toLocaleString('en-IN')}
+                    ₹{Math.round(Number(machinesOperated) * Number(hoursOperated) * (statusData?.worker?.customWageRate || 29.17)).toLocaleString('en-IN')}
                   </strong>
                 </div>
               )}
@@ -1866,7 +1858,7 @@ export const WorkerDashboard: React.FC = () => {
                   <span>Fixed Daily Wage Shift (निश्चित दैनिक पगार)</span>
                 </span>
                 <span className="text-[10px] text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200 font-bold uppercase">
-                  Daily: ₹{statusData?.worker?.dailyWage || user?.dailyWage || 1000}
+                  Fixed Shift
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2.5">
@@ -1990,7 +1982,7 @@ export const WorkerDashboard: React.FC = () => {
                 <div className="p-3 bg-slate-900 text-white rounded-xl space-y-1">
                   <div className="flex items-center justify-between text-[11px] text-slate-400">
                     <span>Shift: ₹{Math.round(shiftPay).toLocaleString('en-IN')} | OT: ₹{Math.round(otPay).toLocaleString('en-IN')}</span>
-                    <span className="font-mono text-slate-400">Rate: ₹{rate.toFixed(2)}/mc/hr</span>
+                    <span className="text-slate-400 font-medium">Standard Shift</span>
                   </div>
                   <div className="flex items-center justify-between pt-1 border-t border-slate-800">
                     <span className="text-xs font-bold text-slate-200">Total Shift Pay:</span>
@@ -2012,8 +2004,8 @@ export const WorkerDashboard: React.FC = () => {
               return (
                 <div className="p-3 bg-slate-900 text-white rounded-xl space-y-1">
                   <div className="flex items-center justify-between text-[11px] text-slate-400">
-                    <span>Fixed Daily Wage</span>
-                    <span className="font-mono text-slate-400">Daily Rate: ₹{dailyRate.toLocaleString('en-IN')}</span>
+                    <span>Fixed Daily Shift</span>
+                    <span className="text-slate-400 font-medium">Standard Shift</span>
                   </div>
                   {otPay > 0 && (
                     <div className="flex items-center justify-between text-[11px] text-amber-300">

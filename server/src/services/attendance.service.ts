@@ -430,8 +430,8 @@ export function calculateShiftEarnings(
   const totalEarned = isOvertimeApproved ? Math.max(0, baseEarned + overtimeEarned) : Math.max(0, baseEarned);
 
   const formula = isCustom
-    ? `${m} Loom(s) × ${h} hrs @ ₹${user.customWageRate || 0}/mc/hr`
-    : `Daily Wage ₹${user.dailyWage || 1000}`;
+    ? `${m} Loom(s) • ${h} hrs`
+    : `Standard Shift`;
 
   return {
     totalEarned,
